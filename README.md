@@ -160,6 +160,8 @@ machines.
 
 Make sure to keep the communication between nodes as efficient as possible. For example, consider a halo exchange scheme where only the edges are communicated between the nodes.
 
+*We created a [5120x5120 pgm file](https://uob-my.sharepoint.com/:u:/g/personal/kg17815_bristol_ac_uk/EUWlZMH2MetHuNF8Ua3nb7EBx-LJqqU6OeFAW0SuHvr0pw?e=hWK1W0) if you wish to test or benchmark your solution with a very large image.*
+
 ### Step 4
 
 Alter your keypress logic so that when a `k` keypress is input on the controller
