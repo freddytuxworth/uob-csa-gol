@@ -1,6 +1,6 @@
 # CSA Coursework: Game of Life
 
-**IMPORTANT: Monday 16.11 at 10:00 - COURSEWORK Q&A on Teams**
+**[Coursework Q&A Recording](https://web.microsoftstream.com/video/ab833321-3a78-4c83-b87e-16ce1b5c244f)**
 
 This is the Computer Systems A summative coursework. The coursework is worth 80% of the unit mark. It is to be completed in your programming pairs. You must report any change to your pairing to the unit director *before* starting your assignment. It runs over 4 weeks and the deadline for submitting all your work is **Friday 11 December 13:00**.
 
