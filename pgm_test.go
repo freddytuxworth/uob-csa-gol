@@ -22,7 +22,7 @@ func TestPgm(t *testing.T) {
 				p.ImageWidth,
 				p.ImageHeight,
 			)
-			for threads := 1; threads <= 16; threads++ {
+			for threads := 1; threads <= 16; threads*=2 {
 				p.Threads = threads
 				testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
 				t.Run(testName, func(t *testing.T) {
