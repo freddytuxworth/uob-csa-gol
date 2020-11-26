@@ -67,6 +67,10 @@ type FinalTurnComplete struct {
 	Alive          []util.Cell
 }
 
+type JobFinished struct {
+	threadNumber int
+}
+
 // String methods allow the different types of Events and States to be printed.
 
 func (state State) String() string {

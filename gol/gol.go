@@ -2,7 +2,6 @@ package gol
 
 import (
 	"fmt"
-
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -14,54 +13,49 @@ type Params struct {
 	ImageHeight int
 }
 
-func neighbors(x int, y int, p Params) []byte {
-	fmt.Print("get neighbors for", x, y)
-	fmt.Println(currentState)
-
+func neighbors(x int, y int, grid Grid) []byte {
 	leftX := x - 1
 	if x == 0 {
-		leftX += p.ImageWidth
+		leftX += grid.width
 	}
 
-	rightX := (x + 1) % p.ImageWidth
+	rightX := (x + 1) % grid.width
 
 	upY := y - 1
 	if y == 0 {
-		upY += p.ImageHeight
+		upY += grid.height
 	}
 
-	downY := (y + 1) % p.ImageHeight
+	downY := (y + 1) % grid.height
 
 	return []byte{
-		currentState[upY][leftX],
-		currentState[upY][x],
-		currentState[upY][rightX],
+		grid.cells[upY][leftX],
+		grid.cells[upY][x],
+		grid.cells[upY][rightX],
 
-		currentState[y][leftX],
-		currentState[y][rightX],
+		grid.cells[y][leftX],
+		grid.cells[y][rightX],
 
-		currentState[downY][leftX],
-		currentState[downY][x],
-		currentState[downY][rightX]}
+		grid.cells[downY][leftX],
+		grid.cells[downY][x],
+		grid.cells[downY][rightX]}
 }
 
-func shouldSurvive(x int, y int, p Params) byte {
-	fmt.Println(currentState)
-	return 0
-	// var livingNeighbors byte = 0
-	// for _, v := range neighbors(x, y, p) {
-	// 	livingNeighbors += v / 255
-	// }
+func shouldSurvive(x int, y int, grid Grid) byte {
+	var livingNeighbors byte = 0
+	for _, v := range neighbors(x, y, grid) {
+		livingNeighbors += v / 255
+	}
 
-	// if livingNeighbors < 2 {
-	// 	return 0
-	// } else if livingNeighbors == 2 {
-	// 	return currentState[y][x]
-	// } else if livingNeighbors == 3 {
-	// 	return 255
-	// } else {
-	// 	return 0
-	// }
+	if livingNeighbors < 2 {
+		return 0
+	} else if livingNeighbors == 2 {
+		return grid.cells[y][x]
+	} else if livingNeighbors == 3 {
+		return 255
+	} else {
+		return 0
+	}
 }
 
 // func calculateNextState(p Params, world [][]byte, events chan<- Event, turn int) [][]byte {
@@ -112,11 +106,11 @@ func shouldSurvive(x int, y int, p Params) byte {
 // 	return nextState
 // }
 
-func calculateAliveCells(p Params) []util.Cell {
+func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 	aliveCells := []util.Cell{}
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
-			if currentState[y][x] == 255 {
+			if state[y][x] == 255 {
 				aliveCells = append(aliveCells, util.Cell{X: x, Y: y})
 			}
 		}
@@ -152,4 +146,5 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		input:    ioInput,
 	}
 	go startIo(p, ioChannels)
+	//time.Sleep(100 * time.Second)
 }
