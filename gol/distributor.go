@@ -29,7 +29,7 @@ func distributor(p Params, c distributorChannels) {
 			worldSlice[y][x] = <-c.input
 			if worldSlice[y][x] == 255 {
 				c.events <- CellFlipped{
-					CompletedTurns: 0,
+					CompletedTurns: 1,
 					Cell: util.Cell{
 						X: x,
 						Y: y,
