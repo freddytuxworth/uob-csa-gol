@@ -26,7 +26,7 @@ type distributorChannels struct {
 	input    <-chan uint8
 }
 
-func workerThread(jobs chan Job, results chan<- []util.Cell) {
+func workerThread(jobs <-chan Job, results chan<- []util.Cell) {
 	for {
 		job := <-jobs
 
@@ -87,7 +87,7 @@ func collateResults(p Params, currentState [][]byte, resultsChan chan []util.Cel
 			CompletedTurns: turn,
 			Cell:           cell,
 		}
-		currentState[cell.Y][cell.X] = 255 - currentState[cell.Y][cell.X]
+		currentState[cell.Y][cell.X] = 1 - currentState[cell.Y][cell.X]
 	}
 }
 
@@ -99,8 +99,8 @@ func readImageToSlice(p Params, c distributorChannels) [][]byte {
 	for y := range loadedCells {
 		loadedCells[y] = make([]byte, p.ImageWidth)
 		for x := range loadedCells[y] {
-			loadedCells[y][x] = <-c.input
-			if loadedCells[y][x] == 255 {
+			if <-c.input > 0 {
+				loadedCells[y][x] = 1
 				c.events <- CellFlipped{
 					CompletedTurns: 0,
 					Cell:           util.Cell{X: x, Y: y},

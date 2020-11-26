@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -13,7 +12,7 @@ type Params struct {
 	ImageHeight int
 }
 
-func neighbors(x int, y int, grid Grid) []byte {
+func shouldSurvive(x int, y int, grid Grid) byte {
 	leftX := x - 1
 	if x == 0 {
 		leftX += grid.width
@@ -21,96 +20,32 @@ func neighbors(x int, y int, grid Grid) []byte {
 
 	rightX := (x + 1) % grid.width
 
-	upY := y - 1
-	if y == 0 {
-		upY += grid.height
-	}
+	livingNeighbors :=
+		grid.cells[y - 1][leftX] +
+			grid.cells[y - 1][x] +
+			grid.cells[y - 1][rightX] +
 
-	downY := (y + 1) % grid.height
+			grid.cells[y][leftX] +
+			grid.cells[y][rightX] +
 
-	return []byte{
-		grid.cells[upY][leftX],
-		grid.cells[upY][x],
-		grid.cells[upY][rightX],
+			grid.cells[y + 1][leftX] +
+			grid.cells[y + 1][x] +
+			grid.cells[y + 1][rightX]
 
-		grid.cells[y][leftX],
-		grid.cells[y][rightX],
-
-		grid.cells[downY][leftX],
-		grid.cells[downY][x],
-		grid.cells[downY][rightX]}
-}
-
-func shouldSurvive(x int, y int, grid Grid) byte {
-	var livingNeighbors byte = 0
-	for _, v := range neighbors(x, y, grid) {
-		livingNeighbors += v / 255
-	}
-
-	if livingNeighbors < 2 {
-		return 0
-	} else if livingNeighbors == 2 {
+	if livingNeighbors == 2 {
 		return grid.cells[y][x]
 	} else if livingNeighbors == 3 {
-		return 255
-	} else {
-		return 0
+		return 1
 	}
+
+	return 0
 }
-
-// func calculateNextState(p Params, world [][]byte, events chan<- Event, turn int) [][]byte {
-// 	nextState := make([][]byte, p.ImageHeight)
-
-// 	for y := 0; y < p.ImageHeight; y++ {
-// 		nextState[y] = make([]byte, p.ImageWidth)
-// 		for x := 0; x < p.ImageWidth; x++ {
-// 			nextCellState := shouldSurvive(x, y, world, p)
-// 			if nextCellState != nextState[y][x] {
-// 				// fmt.Print("cell changed state:", x, y)
-// 				events <- CellFlipped{
-// 					CompletedTurns: turn,
-// 					Cell: util.Cell{
-// 						X: x,
-// 						Y: y,
-// 					},
-// 				}
-// 			}
-// 			nextState[y][x] = nextCellState
-// 		}
-// 	}
-
-// 	return nextState
-// }
-
-// func stripNextState(p Params, strip [][]byte, stripHeight int, events chan<- Event, turn int) [][]byte {
-// 	nextState := make([][]byte, stripHeight)
-
-// 	for y := 0; y < stripHeight; y++ {
-// 		nextState[y] = make([]byte, p.ImageWidth)
-// 		for x := 0; x < p.ImageWidth; x++ {
-// 			nextCellState := shouldSurvive(x, y+1, strip, p)
-// 			if nextCellState != nextState[y][x] {
-// 				// fmt.Print("cell changed state:", x, y)
-// 				events <- CellFlipped{
-// 					CompletedTurns: turn,
-// 					Cell: util.Cell{
-// 						X: x,
-// 						Y: y,
-// 					},
-// 				}
-// 			}
-// 			nextState[y][x] = nextCellState
-// 		}
-// 	}
-
-// 	return nextState
-// }
 
 func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 	aliveCells := []util.Cell{}
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
-			if state[y][x] == 255 {
+			if state[y][x] > 0 {
 				aliveCells = append(aliveCells, util.Cell{X: x, Y: y})
 			}
 		}
@@ -121,7 +56,6 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 
 // Run starts the processing of Game of Life. It should initialise channels and goroutines.
 func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
-	fmt.Println("TEST")
 	ioCommand := make(chan ioCommand)
 	ioIdle := make(chan bool)
 	ioFilename := make(chan string)
