@@ -41,6 +41,17 @@ func shouldSurvive(x int, y int, grid Grid) byte {
 	return 0
 }
 
+func countAliveCells(p Params, state [][]byte) int {
+	aliveCells := 0
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			aliveCells += int(state[y][x])
+		}
+	}
+
+	return aliveCells
+}
+
 func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 	aliveCells := []util.Cell{}
 	for y := 0; y < p.ImageHeight; y++ {

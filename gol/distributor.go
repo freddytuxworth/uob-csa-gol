@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -122,10 +123,22 @@ func distributor(p Params, c distributorChannels) {
 		go workerThread(workers[t], resultsChan)
 	}
 
-	for turn := 0; turn < p.Turns; turn++ {
-		splitAndSend(p, currentState, workers)
-		collateResults(p, currentState, resultsChan, c.events, turn)
-		c.events <- TurnComplete{turn + 1}
+	ticker := time.NewTicker(2 * time.Second)
+
+	for turn := 0; turn < p.Turns; {
+		select {
+		case <-ticker.C:
+			c.events <- AliveCellsCount{
+				CompletedTurns: turn,
+				CellsCount:     countAliveCells(p, currentState),
+			}
+		default:
+			splitAndSend(p, currentState, workers)
+			collateResults(p, currentState, resultsChan, c.events, turn)
+			c.events <- TurnComplete{turn+1}
+			//fmt.Println(turn, countAliveCells(p, currentState))
+			turn++
+		}
 	}
 
 	c.events <- FinalTurnComplete{
