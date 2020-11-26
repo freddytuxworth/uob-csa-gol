@@ -1,6 +1,9 @@
 package gol
 
-import "fmt"
+import (
+	"fmt"
+	"uk.ac.bris.cs/gameoflife/util"
+)
 
 // Params provides the details of how to run the Game of Life and which image to load.
 type Params struct {
@@ -55,13 +58,23 @@ func shouldSurvive(x int, y int, world [][]byte, p Params) byte {
 	}
 }
 
-func calculateNextState(p Params, world [][]byte) [][]byte {
+func calculateNextState(p Params, world [][]byte, events chan<- Event) [][]byte {
 	nextState := make([][]byte, p.ImageHeight)
 
 	for y := 0; y < p.ImageHeight; y++ {
 		nextState[y] = make([]byte, p.ImageWidth)
 		for x := 0; x < p.ImageWidth; x++ {
-			nextState[y][x] = shouldSurvive(x, y, world, p)
+			nextCellState := shouldSurvive(x, y, world, p)
+			if nextCellState != nextState[y][x] {
+				events <- CellFlipped{
+					CompletedTurns: 0,
+					Cell:           util.Cell{
+						X: x,
+						Y: y,
+					},
+				}
+			}
+			nextState[y][x] = nextCellState
 		}
 	}
 	
