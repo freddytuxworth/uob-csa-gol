@@ -54,3 +54,10 @@ func ReadAliveCells(path string, width, height int) []Cell {
 	}
 	return cells
 }
+
+func WrapNum(v, size int) int {
+	if v < 0 {
+		return v + size
+	}
+	return v % size
+}
