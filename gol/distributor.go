@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"os"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -22,9 +23,10 @@ type distributorChannels struct {
 	ioCommand chan<- ioCommand
 	ioIdle    <-chan bool
 
-	filename chan string
-	output   chan<- uint8
-	input    <-chan uint8
+	filename   chan string
+	output     chan<- uint8
+	input      <-chan uint8
+	keypresses <-chan rune
 }
 
 func workerThread(jobs <-chan Job, results chan<- []util.Cell) {
@@ -112,9 +114,9 @@ func readImageToSlice(p Params, c distributorChannels) [][]byte {
 	return loadedCells
 }
 
-func writeStateToImage(p Params, currentState [][]byte, c distributorChannels) {
+func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, turn int) {
 	c.ioCommand <- ioOutput
-	c.filename <- fmt.Sprintf("%dx%dx%d", p.ImageWidth, p.ImageHeight, p.Turns)
+	c.filename <- fmt.Sprintf("%dx%dx%d", p.ImageWidth, p.ImageHeight, turn)
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageHeight; x++ {
 			c.output <- currentState[y][x]
@@ -142,6 +144,21 @@ func distributor(p Params, c distributorChannels) {
 				CompletedTurns: turn,
 				CellsCount:     countAliveCells(p, currentState),
 			}
+		case key := <-c.keypresses:
+			switch key {
+			case 'p':
+				fmt.Println("Current turn:", turn)
+				for {
+					if <-c.keypresses == 'p' {
+						break
+					}
+				}
+			case 'q':
+				writeStateToImage(p, currentState, c, turn)
+				os.Exit(0)
+			case 's':
+				writeStateToImage(p, currentState, c, turn)
+			}
 		default:
 			splitAndSend(p, currentState, workers)
 			collateResults(p, currentState, resultsChan, c.events, turn)
@@ -155,7 +172,7 @@ func distributor(p Params, c distributorChannels) {
 		CompletedTurns: p.Turns,
 		Alive:          calculateAliveCells(p, currentState),
 	}
-	writeStateToImage(p, currentState, c)
+	writeStateToImage(p, currentState, c, p.Turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
