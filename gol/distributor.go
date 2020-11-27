@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -120,14 +121,21 @@ func startWorkers(p Params, currentState [][]byte) []workerChannels {
 		workers[thread].topEdgeIn = workers[util.WrapNum(thread-1, p.Threads)].bottomEdgeOut
 		workers[thread].bottomEdgeIn = workers[util.WrapNum(thread+1, p.Threads)].topEdgeOut
 	}
-	stripHeight := p.ImageHeight / p.Threads
-	for thread := 0; thread < p.Threads; thread++ {
+
+	n := p.Threads
+	thread := 0
+	for i := 0; i < p.ImageHeight; {
+		size := int(math.Ceil(float64(p.ImageHeight - i) / float64(n)))
+		n--
 		go workerThread(thread, Grid{
 			width:  p.ImageWidth,
-			height: stripHeight,
-			cells:  currentState[thread*stripHeight : (thread+1)*stripHeight],
-		}, thread*stripHeight, workers[thread])
+			height: size,
+			cells:  currentState[i : i + size],
+		}, i, workers[thread])
+		i += size
+		thread++
 	}
+
 	return workers
 }
 
@@ -182,20 +190,8 @@ type turnUpdate struct {
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	currentState := readImageToSlice(p, c)
-	//resultsChan := make(chan []util.Cell, p.Threads)
 
-
-	//turnChan := make(chan turnUpdate, p.Threads)
-	//turnStats := make([]int, p.Threads)
-	//printGrid(-1, 0, Grid{
-	//	width: p.ImageWidth,
-	//	height: p.ImageHeight,
-	//	cells: currentState,
-	//})
 	workers := startWorkers(p, currentState)
-	//for turn := 0; turn < p.Turns; turn++ {
-	//	collateResults(p, currentState, resultsChan, c.events, turn)
-	//}
 	ticker := time.NewTicker(2 * time.Second)
 
 	for turn := 0; turn < p.Turns; {
@@ -205,13 +201,6 @@ func distributor(p Params, c distributorChannels) {
 				CompletedTurns: turn,
 				CellsCount:     countAliveCells(p, currentState),
 			}
-		//case t := <-turnChan:
-		//	turnStats[t.thread] = t.turn
-		//	out := ""
-		//	for i, t := range turnStats {
-		//		out += fmt.Sprintf("%02d %s\n", i, strings.Repeat(".", t))
-		//	}
-		//	fmt.Print(out)
 		case key := <-c.keypresses:
 			switch key {
 			case 'p':
@@ -239,7 +228,7 @@ func distributor(p Params, c distributorChannels) {
 		CompletedTurns: p.Turns,
 		Alive:          calculateAliveCells(p, currentState),
 	}
-	//writeStateToImage(p, currentState, c, p.Turns)
+	writeStateToImage(p, currentState, c, p.Turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
