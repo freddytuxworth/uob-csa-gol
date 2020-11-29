@@ -49,19 +49,20 @@ func workerThread(threadNum int, initialState Grid, offsetY int, c workerChannel
 	wrappedGrid := Grid{
 		width:  initialState.width,
 		height: initialState.height + 2,
-		cells:  make([][]byte, initialState.height + 2),
+		cells:  make([][]byte, initialState.height+2),
 	}
 
-	for y:=0; y < wrappedGrid.height; y++ {
+	for y := 0; y < wrappedGrid.height; y++ {
 		wrappedGrid.cells[y] = make([]byte, initialState.width)
-		if y > 0 && y < wrappedGrid.height - 1 {
+		if y > 0 && y < wrappedGrid.height-1 {
 			copy(wrappedGrid.cells[y], initialState.cells[y-1])
 		}
 	}
 
 	sendEdges(wrappedGrid, c)
 
-	for turn := 1;; turn++ {
+	for turn := 1; ; turn++ {
+		// get top and bottom edges from workers above and below
 		wrappedGrid.cells[0] = <-c.topEdgeIn
 		wrappedGrid.cells[initialState.height+1] = <-c.bottomEdgeIn
 
@@ -78,7 +79,7 @@ func workerThread(threadNum int, initialState Grid, offsetY int, c workerChannel
 			}
 		}
 		for _, cellFlip := range cellFlips {
-			wrappedGrid.cells[cellFlip.Y - offsetY + 1][cellFlip.X] = 1 - wrappedGrid.cells[cellFlip.Y - offsetY + 1][cellFlip.X]
+			wrappedGrid.cells[cellFlip.Y-offsetY+1][cellFlip.X] = 1 - wrappedGrid.cells[cellFlip.Y-offsetY+1][cellFlip.X]
 		}
 		sendEdges(wrappedGrid, c)
 		c.results <- cellFlips
@@ -99,17 +100,19 @@ func startWorkers(p Params, currentState [][]byte) []workerChannels {
 	for thread := 0; thread < p.Threads; thread++ {
 		workers[thread].topEdgeIn = workers[util.WrapNum(thread-1, p.Threads)].bottomEdgeOut
 		workers[thread].bottomEdgeIn = workers[util.WrapNum(thread+1, p.Threads)].topEdgeOut
+		fmt.Printf("worker %d: %#v\n\n", thread, workers[thread])
 	}
 
 	n := p.Threads
 	thread := 0
 	for i := 0; i < p.ImageHeight; {
-		size := int(math.Ceil(float64(p.ImageHeight - i) / float64(n)))
+		// calculate (p.ImageHeight - i) / n and round up
+		size := int(math.Ceil(float64(p.ImageHeight-i) / float64(n)))
 		n--
 		go workerThread(thread, Grid{
 			width:  p.ImageWidth,
 			height: size,
-			cells:  currentState[i : i + size],
+			cells:  currentState[i : i+size],
 		}, i, workers[thread])
 		i += size
 		thread++
@@ -151,6 +154,7 @@ func readImageToSlice(p Params, c distributorChannels) [][]byte {
 	return loadedCells
 }
 
+// send the current board data to the IO goroutine for output to an image
 func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, turn int) {
 	c.ioCommand <- ioOutput
 	c.filename <- fmt.Sprintf("%dx%dx%d", p.ImageWidth, p.ImageHeight, turn)
@@ -159,11 +163,6 @@ func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, t
 			c.output <- currentState[y][x]
 		}
 	}
-}
-
-type turnUpdate struct {
-	thread int
-	turn int
 }
 
 // distributor divides the work between workers and interacts with other goroutines.

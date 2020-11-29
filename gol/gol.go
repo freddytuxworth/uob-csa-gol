@@ -21,16 +21,14 @@ func shouldSurvive(x int, y int, grid Grid) byte {
 	rightX := (x + 1) % grid.width
 
 	livingNeighbors :=
-		grid.cells[y - 1][leftX] +
-			grid.cells[y - 1][x] +
-			grid.cells[y - 1][rightX] +
-
+		grid.cells[y-1][leftX] +
+			grid.cells[y-1][x] +
+			grid.cells[y-1][rightX] +
 			grid.cells[y][leftX] +
 			grid.cells[y][rightX] +
-
-			grid.cells[y + 1][leftX] +
-			grid.cells[y + 1][x] +
-			grid.cells[y + 1][rightX]
+			grid.cells[y+1][leftX] +
+			grid.cells[y+1][x] +
+			grid.cells[y+1][rightX]
 
 	if livingNeighbors == 2 {
 		return grid.cells[y][x]
