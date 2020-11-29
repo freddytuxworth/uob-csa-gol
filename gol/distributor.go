@@ -14,11 +14,6 @@ type Grid struct {
 	cells  [][]byte
 }
 
-type Job struct {
-	grid    Grid
-	offsetY int
-}
-
 type distributorChannels struct {
 	events    chan<- Event
 	ioCommand chan<- ioCommand
@@ -38,22 +33,6 @@ type workerChannels struct {
 	bottomEdgeOut chan []byte
 
 	results chan []util.Cell
-}
-
-func printGrid(id int, offset int, grid Grid) {
-	output := ""
-	for y := 0; y < grid.height; y++ {
-		row := ""
-		for x := 0; x < grid.width; x++ {
-			if grid.cells[y][x] > 0 {
-				row += "#"
-			} else {
-				row += "."
-			}
-		}
-		output += fmt.Sprintf("%02d | %02d: %s\n", id, y + offset, row)
-	}
-	fmt.Println(output)
 }
 
 func sendEdges(wrappedGrid Grid, c workerChannels) {
