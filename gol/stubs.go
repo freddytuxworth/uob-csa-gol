@@ -3,7 +3,6 @@ package gol
 import (
 	"net"
 	"net/rpc"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 func serve(receiver interface{}, addr string) {
@@ -18,10 +17,10 @@ var SetState = "Worker.SetState"
 var SetRowAbove = "Worker.SetRowAbove"
 var SetRowBelow = "Worker.SetRowBelow"
 var PauseWorker = "Worker.Pause"
-var GetCurrentTurn = "Worker.GetTurn"
+var GetWorkerState = "Worker.GetState"
 
 // distributor methods
-var ChangeCells = "Distributor.ChangeCells"
+var SetWorkerState = "Distributor.SetWorkerState"
 var GetImage = "Distributor.GetImage"
 var PauseDistributor = "Distributor.Pause"
 var SetInitialState = "Distributor.SetInitialState"
@@ -29,10 +28,15 @@ var SetInitialState = "Distributor.SetInitialState"
 // controller methods
 var CellsAlive = "Controller.CellsAlive"
 
-type WorkerUpdate struct {
-	workerId     int
-	turn         int
-	cellsFlipped []util.Cell
+type WorkerStateUpdate struct {
+	workerId int
+	turn     int
+	state    [][]byte
+}
+
+type RowAboveUpdate struct {
+	rowAbove           []byte
+	stateRequestWorker int
 }
 
 type WorkerInitialState struct {

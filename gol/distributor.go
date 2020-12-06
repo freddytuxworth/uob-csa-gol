@@ -16,9 +16,8 @@ type Grid struct {
 }
 
 type workerConnection struct {
-	client       *rpc.Client
-	addr         string
-	updatesQueue []WorkerUpdate
+	client *rpc.Client
+	addr   string
 }
 
 type strip struct {
@@ -26,17 +25,12 @@ type strip struct {
 	height int
 }
 
-var workerUpdatesChan = make(chan WorkerUpdate, 1000)
 var imageChan = make(chan []byte, 1)
 var imageRequestChan = make(chan bool, 1)
 var initialStateChan = make(chan DistributorInitialState, 2)
+var workerStateUpdates chan WorkerStateUpdate
 
 type Distributor struct{}
-
-func (d *Distributor) ChangeCells(req WorkerUpdate, res bool) (err error) {
-	workerUpdatesChan <- req
-	return
-}
 
 func (d *Distributor) GetImage(req bool, res []byte) (err error) {
 	imageRequestChan <- true
@@ -46,6 +40,11 @@ func (d *Distributor) GetImage(req bool, res []byte) (err error) {
 
 func (d *Distributor) SetInitialState(req DistributorInitialState, res bool) (err error) {
 	initialStateChan <- req
+	return
+}
+
+func (d *Distributor) WorkerState(req WorkerStateUpdate, res bool) (err error) {
+	workerStateUpdates <- req
 	return
 }
 
@@ -62,11 +61,6 @@ func makeStrips(totalHeight, numStrips int) []strip {
 }
 
 func startWorkers(p Params, currentState [][]byte, thisAddr string, workers []workerConnection) {
-	//for thread := 0; thread < p.Threads; thread++ {
-	//	workers[thread].topEdgeIn = workers[util.WrapNum(thread-1, p.Threads)].bottomEdgeOut
-	//	workers[thread].bottomEdgeIn = workers[util.WrapNum(thread+1, p.Threads)].topEdgeOut
-	//	fmt.Printf("workerConnection %d: %#v\n\n", thread, workers[thread])
-	//}
 	numWorkers := len(workers)
 	strips := makeStrips(p.ImageHeight, numWorkers)
 	for i, worker := range workers {
@@ -81,13 +75,13 @@ func startWorkers(p Params, currentState [][]byte, thisAddr string, workers []wo
 	}
 }
 
-func sendImage(currentState [][]byte) {
-	fmt.Println(currentState)
+func fetchState(workers []workerConnection) [][]byte {
+	workers[0].client.Call(GetWorkerState, false, nil)
+	state := make([][]byte, len(workers))
+	for i=0;{
+
+	}
 	imageChan <- make([]byte, 2)
-}
-
-func collateUpdates(currentState [][]byte, workers []workerConnection) {
-
 }
 
 func runDistributor(thisAddr string, workerAddrs []string) {
@@ -107,24 +101,16 @@ func runDistributor(thisAddr string, workerAddrs []string) {
 	}
 
 	//var width, height int
-	var currentState [][]byte
-	var currentTurn int
-	var workerUpdateQueues [][]WorkerUpdate
 
 	for {
 		select {
 		case initialState := <-initialStateChan:
-			currentTurn = 0
-			currentState = initialState.cells
 			p.ImageWidth = initialState.width
 			p.ImageHeight = initialState.height
-			for i = 0; i < wo
-			startWorkers(p, currentState, thisAddr, workers)
-		case workerUpdate := <-workerUpdatesChan:
-			workers[workerUpdate.workerId].updatesQueue = append(workers[workerUpdate.workerId].updatesQueue, workerUpdate)
-			collateUpdates(currentState, workers)
+			startWorkers(p, initialState.cells, thisAddr, workers)
 		case <-imageRequestChan:
-			sendImage(currentState)
+			state := fetchState(workers)
+			sendImage(state)
 		}
 	}
 }
