@@ -1,12 +1,18 @@
-package gol
+package stubs
 
 import (
 	"net"
 	"net/rpc"
 )
 
-func serve(receiver interface{}, addr string) {
-	rpc.Register(receiver)
+type Grid struct {
+	Width  int
+	Height int
+	Cells  [][]byte
+}
+
+func Serve(receiver interface{}, addr string) {
+	rpc.Register(&receiver)
 	listener, _ := net.Listen("tcp", addr)
 	defer listener.Close()
 	rpc.Accept(listener)
@@ -20,7 +26,7 @@ var PauseWorker = "Worker.Pause"
 var GetWorkerState = "Worker.GetState"
 
 // distributor methods
-var SetWorkerState = "Distributor.SetWorkerState"
+var SetWorkerState = "Distributor.WorkerState"
 var GetImage = "Distributor.GetImage"
 var PauseDistributor = "Distributor.Pause"
 var SetInitialState = "Distributor.SetInitialState"
@@ -29,29 +35,33 @@ var SetInitialState = "Distributor.SetInitialState"
 var CellsAlive = "Controller.CellsAlive"
 
 type WorkerStateUpdate struct {
-	workerId int
-	turn     int
-	state    [][]byte
+	WorkerId int
+	Turn     int
+	State    [][]byte
 }
 
 type RowAboveUpdate struct {
-	rowAbove           []byte
-	stateRequestWorker int
+	RowAbove           []byte
+	StateRequestWorker int
 }
 
 type WorkerInitialState struct {
-	workerId        int
-	width           int
-	height          int
-	cells           [][]byte
-	workerAboveAddr string
-	workerBelowAddr string
-	distributorAddr string
+	WorkerId        int
+	Width           int
+	Height          int
+	Cells           [][]byte
+	WorkerAboveAddr string
+	WorkerBelowAddr string
+	DistributorAddr string
 }
 
 type DistributorInitialState struct {
-	width          int
-	height         int
-	cells          [][]byte
-	controllerAddr string
+	Width          int
+	Height         int
+	Cells          [][]byte
+	ControllerAddr string
+}
+
+type OperationResult struct {
+	success bool
 }
