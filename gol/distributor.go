@@ -167,7 +167,6 @@ func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, t
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	fmt.Println("Distributing")
 	c.ioParams <- p
 	currentState := readImageToSlice(p, c)
 
@@ -199,7 +198,7 @@ func distributor(p Params, c distributorChannels) {
 		default:
 			collateResults(p, currentState, workers, c.events, turn)
 			c.events <- TurnComplete{turn + 1}
-			fmt.Println(turn, countAliveCells(p, currentState))
+			//fmt.Println(turn, countAliveCells(p, currentState))
 			turn++
 		}
 	}

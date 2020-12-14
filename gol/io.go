@@ -88,7 +88,6 @@ func (io *ioState) writePgmImage() {
 
 // readPgmImage opens a pgm file and sends its data as an array of bytes.
 func (io *ioState) readPgmImage() {
-	fmt.Println("Reading image!")
 	filename := <-io.channels.filename
 	data, ioError := ioutil.ReadFile("images/" + filename + ".pgm")
 	util.Check(ioError)
@@ -119,8 +118,6 @@ func (io *ioState) readPgmImage() {
 	for _, b := range image {
 		io.channels.input <- b
 	}
-
-	fmt.Println("File", filename, "input done!")
 }
 
 // startIo should be the entrypoint of the io goroutine.
@@ -133,7 +130,6 @@ func startIo(c ioChannels) {
 	for {
 		select {
 		case command := <-io.channels.command:
-			fmt.Println("Received IO command", command)
 			switch command {
 			case ioInput:
 				io.readPgmImage()

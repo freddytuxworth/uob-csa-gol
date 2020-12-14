@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -65,7 +64,6 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 }
 
 func SetupIO(events chan<- Event, keyPresses <-chan rune) distributorChannels {
-	fmt.Println("IO")
 	ioCommand := make(chan ioCommand)
 	ioIdle := make(chan bool)
 	ioParams := make(chan Params)
