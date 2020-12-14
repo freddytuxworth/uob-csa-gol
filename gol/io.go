@@ -12,6 +12,7 @@ import (
 type ioChannels struct {
 	command <-chan ioCommand
 	idle    chan<- bool
+	params  <-chan Params
 
 	filename <-chan string
 	output   <-chan uint8
@@ -36,6 +37,7 @@ const (
 	ioOutput ioCommand = iota
 	ioInput
 	ioCheckIdle
+	ioChangeParams
 )
 
 // writePgmImage receives an array of bytes and writes it to a pgm file.
@@ -122,9 +124,9 @@ func (io *ioState) readPgmImage() {
 }
 
 // startIo should be the entrypoint of the io goroutine.
-func startIo(p Params, c ioChannels) {
+func startIo(c ioChannels) {
 	io := ioState{
-		params:   p,
+		params:   <-c.params,
 		channels: c,
 	}
 
@@ -139,6 +141,8 @@ func startIo(p Params, c ioChannels) {
 				io.writePgmImage()
 			case ioCheckIdle:
 				io.channels.idle <- true
+			case ioChangeParams:
+				io.params = <-io.channels.params
 			}
 		}
 	}

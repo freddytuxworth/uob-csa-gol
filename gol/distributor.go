@@ -18,6 +18,7 @@ type distributorChannels struct {
 	events    chan<- Event
 	ioCommand chan<- ioCommand
 	ioIdle    <-chan bool
+	ioParams  chan<- Params
 
 	filename   chan string
 	output     chan<- uint8
@@ -100,7 +101,6 @@ func startWorkers(p Params, currentState [][]byte) []workerChannels {
 	for thread := 0; thread < p.Threads; thread++ {
 		workers[thread].topEdgeIn = workers[util.WrapNum(thread-1, p.Threads)].bottomEdgeOut
 		workers[thread].bottomEdgeIn = workers[util.WrapNum(thread+1, p.Threads)].topEdgeOut
-		fmt.Printf("worker %d: %#v\n\n", thread, workers[thread])
 	}
 
 	n := p.Threads
@@ -167,6 +167,8 @@ func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, t
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
+	fmt.Println("Distributing")
+	c.ioParams <- p
 	currentState := readImageToSlice(p, c)
 
 	workers := startWorkers(p, currentState)
@@ -197,7 +199,7 @@ func distributor(p Params, c distributorChannels) {
 		default:
 			collateResults(p, currentState, workers, c.events, turn)
 			c.events <- TurnComplete{turn + 1}
-			//fmt.Println(turn, countAliveCells(p, currentState))
+			fmt.Println(turn, countAliveCells(p, currentState))
 			turn++
 		}
 	}
@@ -206,7 +208,7 @@ func distributor(p Params, c distributorChannels) {
 		CompletedTurns: p.Turns,
 		Alive:          calculateAliveCells(p, currentState),
 	}
-	writeStateToImage(p, currentState, c, p.Turns)
+	//writeStateToImage(p, currentState, c, p.Turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle

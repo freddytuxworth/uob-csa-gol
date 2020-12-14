@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -63,32 +64,44 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 	return aliveCells
 }
 
-// Run starts the processing of Game of Life. It should initialise channels and goroutines.
-func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
+func SetupIO(events chan<- Event, keyPresses <-chan rune) distributorChannels {
+	fmt.Println("IO")
 	ioCommand := make(chan ioCommand)
 	ioIdle := make(chan bool)
+	ioParams := make(chan Params)
 	ioFilename := make(chan string)
 	ioInput := make(chan uint8)
 	ioOutput := make(chan uint8)
 
-	distributorChannels := distributorChannels{
-		events,
-		ioCommand,
-		ioIdle,
-		ioFilename,
-		ioOutput,
-		ioInput,
-		keyPresses,
-	}
-	go distributor(p, distributorChannels)
-
 	ioChannels := ioChannels{
 		command:  ioCommand,
 		idle:     ioIdle,
+		params:   ioParams,
 		filename: ioFilename,
 		output:   ioOutput,
 		input:    ioInput,
 	}
-	go startIo(p, ioChannels)
+	go startIo(ioChannels)
+
+	return distributorChannels{
+		events:     events,
+		ioCommand:  ioCommand,
+		ioIdle:     ioIdle,
+		ioParams:   ioParams,
+		filename:   ioFilename,
+		output:     ioOutput,
+		input:      ioInput,
+		keypresses: keyPresses,
+	}
+}
+
+func RunWithIO(p Params, channels distributorChannels) {
+	go distributor(p, channels)
+}
+
+// Run starts the processing of Game of Life. It should initialise channels and goroutines.
+func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
+	distributorChannels := SetupIO(events, keyPresses)
+	go distributor(p, distributorChannels)
 	//time.Sleep(100 * time.Second)
 }
