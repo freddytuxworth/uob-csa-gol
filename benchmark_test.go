@@ -35,19 +35,22 @@ func runGolOnce(p gol.Params) {
 func BenchmarkGol(b *testing.B) {
 	//os.Stdout = nil
 	sizes := []int{16, 64, 128, 256, 512}
+	turns := []int{1, 100, 1000}
 	//distributorChannels := gol.SetupIO(events, nil)
 	for _, size := range sizes {
 		for workers := 1; workers <= 16; workers *= 2 {
-			b.Run(fmt.Sprintf("%dx%d, %d workers", size, size, workers), func(b *testing.B) {
-				for i:=0;i<b.N;i++ {
-					runGolOnce(gol.Params{
-						Turns:       100,
-						Threads:     workers,
-						ImageWidth:  size,
-						ImageHeight: size,
-					})
-				}
-			})
+			for _, nTurns := range turns {
+				b.Run(fmt.Sprintf("%dx%d, %d workers, %d turns", size, size, workers, nTurns), func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						runGolOnce(gol.Params{
+							Turns:       nTurns,
+							Threads:     workers,
+							ImageWidth:  size,
+							ImageHeight: size,
+						})
+					}
+				})
+			}
 		}
 	}
 
