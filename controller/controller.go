@@ -56,23 +56,27 @@ func main() {
 	//workerServer()
 	client, _ := rpc.Dial("tcp", *distributorAddr)
 
-	state := make([][]byte, 64)
-	for y := 0; y < 64; y++ {
-		state[y] = make([]byte, 64)
-		for x := 0; x < 64; x++ {
+	state := make([][]byte, 16)
+	for y := 0; y < 16; y++ {
+		state[y] = make([]byte, 16)
+		for x := 0; x < 16; x++ {
 			state[y][x] = byte(rand.Intn(2))
 		}
 	}
 
 	client.Call(stubs.SetInitialState, stubs.DistributorInitialState{
-		Width:          64,
-		Height:         64,
+		Width:          16,
+		Height:         16,
 		Cells:          state,
 		ControllerAddr: *thisAddr,
 	}, nil)
-	time.Sleep(5 * time.Second)
-	fmt.Println("Getting state")
-	client.Call(stubs.GetImage, false, false)
+	for {
+		time.Sleep(5 * time.Second)
+		fmt.Println("Getting state")
+		var result [][]byte
+		client.Call(stubs.GetState, false, &result)
+		fmt.Println("Got", result)
+	}
 }
 
 //

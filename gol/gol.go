@@ -63,7 +63,7 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 
 	return aliveCells
 }
-
+//
 //// Run starts the processing of Game of Life. It should initialise channels and goroutines.
 //func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 //	ioCommand := make(chan ioCommand)

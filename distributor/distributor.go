@@ -23,16 +23,16 @@ type strip struct {
 	height int
 }
 
-var imageChan = make(chan []byte, 1)
-var imageRequestChan = make(chan bool, 1)
+var stateChan = make(chan [][]byte, 1)
+var stateRequestChan = make(chan bool, 1)
 var initialStateChan = make(chan stubs.DistributorInitialState, 2)
 var workerStateUpdates = make(chan stubs.WorkerStateUpdate, 2)
 
 type Distributor struct{}
 
-func (d *Distributor) GetImage(req bool, res *[]byte) (err error) {
-	imageRequestChan <- true
-	*res = <-imageChan
+func (d *Distributor) GetState(req bool, res *[][]byte) (err error) {
+	stateRequestChan <- true
+	*res = <-stateChan
 	return
 }
 
@@ -90,7 +90,7 @@ func fetchState(workerStrips []strip, currentState [][]byte, workers []workerCon
 	}
 	fmt.Println("GOT COMPLETE STATE")
 	fmt.Println(currentState)
-	//imageChan <- make([]byte, 2)
+	//stateChan <- make([]byte, 2)
 }
 
 func runDistributor(thisAddr string, workerAddrs []string) {
@@ -124,9 +124,9 @@ func runDistributor(thisAddr string, workerAddrs []string) {
 			p.ImageWidth = initialState.Width
 			p.ImageHeight = initialState.Height
 			workerStrips = startWorkers(p, initialState.Cells, thisAddr, workers)
-		case <-imageRequestChan:
+		case <-stateRequestChan:
 			fetchState(workerStrips, currentState, workers)
-			//sendImage(state)
+			stateChan <- currentState
 		}
 	}
 }

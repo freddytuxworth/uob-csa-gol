@@ -21,13 +21,14 @@ func Serve(receiver interface{}, addr string) {
 // worker methods
 var SetState = "Worker.SetState"
 var SetRowAbove = "Worker.SetRowAbove"
-var SetRowBelow = "Worker.SetRowBelow"
+
+//var SetRowBelow = "Worker.SetRowBelow"
 var PauseWorker = "Worker.Pause"
 var GetWorkerState = "Worker.GetState"
 
 // distributor methods
 var SetWorkerState = "Distributor.WorkerState"
-var GetImage = "Distributor.GetImage"
+var GetState = "Distributor.GetState"
 var PauseDistributor = "Distributor.Pause"
 var SetInitialState = "Distributor.SetInitialState"
 
@@ -43,6 +44,10 @@ type WorkerStateUpdate struct {
 type RowAboveUpdate struct {
 	RowAbove           []byte
 	StateRequestWorker int
+}
+
+type RowAboveResponse struct {
+	RowBelow []byte
 }
 
 type WorkerInitialState struct {
