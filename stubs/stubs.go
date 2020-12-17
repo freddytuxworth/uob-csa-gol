@@ -43,40 +43,42 @@ func Serve(receiver interface{}, addr string) {
 // worker methods
 var SetState = "Worker.SetState"
 var SetRowAbove = "Worker.SetRowAbove"
-var PauseWorker = "Worker.Pause"
 var GetWorkerState = "Worker.GetState"
 
 // distributor methods
 var SetWorkerState = "Distributor.WorkerState"
 var GetState = "Distributor.GetState"
-var PauseDistributor = "Distributor.Pause"
 var SetInitialState = "Distributor.SetInitialState"
-var GetCellsAlive = "Distributor.GetCellsAlive"
 
-// controller methods
-var CellsAlive = "Controller.CellsAlive"
-
-type WorkerStateUpdate struct {
-	WorkerId int
-	Turn     int
-	State    [][]byte
+type InstructionResult struct {
+	WorkerId        int
+	CurrentTurn     int
+	AliveCellsCount int
+	State           Grid
 }
 
-type UpdateRequest uint8
+type Instruction uint8
 
 const (
-	WholeState  UpdateRequest = 1
-	AliveCells  UpdateRequest = 2
-	CurrentTurn UpdateRequest = 4
+	GetCurrentTurn     Instruction = 1
+	GetWholeState      Instruction = 2
+	GetAliveCellsCount Instruction = 4
+	Pause              Instruction = 8
+	Resume             Instruction = 16
+	Shutdown           Instruction = 32
 )
 
+func (s Instruction) HasFlag(flag Instruction) bool {
+	return s&flag != 0
+}
+
 type RowUpdate struct {
-	Row           []byte
-	UpdateRequest UpdateRequest
+	Row          []byte
+	StateRequest Instruction
 }
 
 func (r RowUpdate) String() string {
-	return fmt.Sprintf("%v, %v", r.Row, r.UpdateRequest)
+	return fmt.Sprintf("%v, %v", r.Row, r.StateRequest)
 }
 
 type WorkerInitialState struct {
@@ -92,9 +94,9 @@ func (s WorkerInitialState) String() string {
 
 type DistributorInitialState struct {
 	Grid           Grid
-	ControllerAddr string
+	//ControllerAddr string
 }
 
 func (s DistributorInitialState) String() string {
-	return fmt.Sprintf("size: %dx%d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.ControllerAddr, s.Grid)
+	return fmt.Sprintf("size: %dx%d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.Grid)
 }

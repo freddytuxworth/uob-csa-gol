@@ -6,26 +6,22 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-type IoChannels struct {
-	Command chan IoCommand
+// ioState is the internal state of the io goroutine.
+type ioState struct {
+	Command chan ioCommand
 	Idle    chan bool
 
 	Filename chan string
-	Output   chan uint8
-	Input    chan uint8
-}
-
-// ioState is the internal ioState of the io goroutine.
-type ioState struct {
-	params   Params
-	channels IoChannels
+	Output   chan stubs.Grid
+	Input    chan stubs.Grid
 }
 
 // IoCommand allows requesting behaviour from the io (pgm) goroutine.
-type IoCommand uint8
+type ioCommand uint8
 
 // This is a way of creating enums in Go.
 // It will evaluate to:
@@ -33,7 +29,7 @@ type IoCommand uint8
 //		ioInput 	= 1
 //		ioCheckIdle = 2
 const (
-	ioOutput IoCommand = iota
+	ioOutput ioCommand = iota
 	ioInput
 	ioCheckIdle
 )
@@ -42,38 +38,26 @@ const (
 func (io *ioState) writePgmImage() {
 	_ = os.Mkdir("out", os.ModePerm)
 
-	filename := <-io.channels.Filename
+	filename := <-io.Filename
 	file, ioError := os.Create("out/" + filename + ".pgm")
 	util.Check(ioError)
 	defer file.Close()
 
+	world := <-io.Output
+
 	_, _ = file.WriteString("P5\n")
 	//_, _ = file.WriteString("# PGM file writer by pnmmodules (https://github.com/owainkenwayucl/pnmmodules).\n")
-	_, _ = file.WriteString(strconv.Itoa(io.params.ImageWidth))
+	_, _ = file.WriteString(strconv.Itoa(world.Width))
 	_, _ = file.WriteString(" ")
-	_, _ = file.WriteString(strconv.Itoa(io.params.ImageHeight))
+	_, _ = file.WriteString(strconv.Itoa(world.Height))
 	_, _ = file.WriteString("\n")
 	_, _ = file.WriteString(strconv.Itoa(255))
 	_, _ = file.WriteString("\n")
 
-	world := make([][]byte, io.params.ImageHeight)
-	for i := range world {
-		world[i] = make([]byte, io.params.ImageWidth)
-	}
 
-	for y := 0; y < io.params.ImageHeight; y++ {
-		for x := 0; x < io.params.ImageWidth; x++ {
-			val := <-io.channels.Output
-			//if val != 0 {
-			//	fmt.Println(x, y)
-			//}
-			world[y][x] = val
-		}
-	}
-
-	for y := 0; y < io.params.ImageHeight; y++ {
-		for x := 0; x < io.params.ImageWidth; x++ {
-			_, ioError = file.Write([]byte{world[y][x]})
+	for y := 0; y < world.Height; y++ {
+		for x := 0; x < world.Width; x++ {
+			_, ioError = file.Write([]byte{world.Cells[y][x] * 255})
 			util.Check(ioError)
 		}
 	}
@@ -87,7 +71,7 @@ func (io *ioState) writePgmImage() {
 // readPgmImage opens a pgm file and sends its data as an array of bytes.
 func (io *ioState) readPgmImage() {
 	fmt.Println("Reading image!")
-	filename := <-io.channels.Filename
+	filename := <-io.Filename
 	data, ioError := ioutil.ReadFile("images/" + filename + ".pgm")
 	util.Check(ioError)
 
@@ -98,64 +82,72 @@ func (io *ioState) readPgmImage() {
 	}
 
 	width, _ := strconv.Atoi(fields[1])
-	if width != io.params.ImageWidth {
-		panic("Incorrect width")
-	}
-
 	height, _ := strconv.Atoi(fields[2])
-	if height != io.params.ImageHeight {
-		panic("Incorrect height")
-	}
-
 	maxval, _ := strconv.Atoi(fields[3])
 	if maxval != 255 {
 		panic("Incorrect maxval/bit depth")
 	}
 
-	image := []byte(fields[4])
+	world := make([][]byte, width)
+	raw := []byte(fields[4])
 
-	for _, b := range image {
-		io.channels.Input <- b
+	for y := 0; y < height; y++ {
+		world[y] = make([]byte, width)
+		for x := 0; x < width; x++ {
+			world[y][x] = raw[y * width + x] >> 7
+		}
+	}
+	io.Input <- stubs.Grid{
+		Width:  width,
+		Height: height,
+		Cells:  world,
 	}
 
 	fmt.Println("File", filename, "input done!")
 }
 
-// startIo should be the entrypoint of the io goroutine.
-func StartIo(p Params, c IoChannels) {
-	io := ioState{
-		params:   p,
-		channels: c,
-	}
-
+func (io *ioState) ioLoop() {
 	for {
 		select {
-		case command := <-io.channels.Command:
-			fmt.Println("Received IO Command", command)
+		case command := <-io.Command:
 			switch command {
 			case ioInput:
 				io.readPgmImage()
 			case ioOutput:
 				io.writePgmImage()
 			case ioCheckIdle:
-				io.channels.Idle <- true
+				io.Idle <- true
 			}
 		}
 	}
 }
 
-func ReadImageToSlice(p Params, c IoChannels) [][]byte {
-	c.Command <- ioInput // send ioInput command to io goroutine
-	c.Filename <- fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
-
-	loadedCells := make([][]byte, p.ImageHeight)
-	for y := range loadedCells {
-		loadedCells[y] = make([]byte, p.ImageWidth)
-		for x := range loadedCells[y] {
-			if <-c.Input > 0 {
-				loadedCells[y][x] = 1
-			}
-		}
+// startIo should be the entrypoint of the io goroutine.
+func StartIo() ioState {
+	io := ioState{
+		Command:  make(chan ioCommand),
+		Idle:     make(chan bool),
+		Filename: make(chan string),
+		Output:   make(chan stubs.Grid),
+		Input:    make(chan stubs.Grid),
 	}
-	return loadedCells
+
+	go io.ioLoop()
+
+	return io
+}
+
+// synchronously write a grid to a PGM file
+func (io *ioState) writeStateToImage(state stubs.Grid, filename string) {
+	io.Command <- ioOutput
+	io.Filename <- filename
+	io.Output <- state
+}
+
+// synchronously read a grid from a PGM file
+func (io *ioState) readImageToSlice(filename string) stubs.Grid {
+	io.Command <- ioInput // send ioInput command to io goroutine
+	io.Filename <- filename
+
+	return <-io.Input
 }

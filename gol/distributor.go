@@ -1,14 +1,12 @@
-package main
+package gol
 
 import (
-	"flag"
 	"fmt"
 	"math"
 	"net"
 	"net/rpc"
-	"strings"
-	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type workerConnection struct {
@@ -21,26 +19,31 @@ type strip struct {
 	height int
 }
 
-var stateChan = make(chan [][]byte, 1)
-var stateRequestChan = make(chan bool, 1)
-var initialStateChan = make(chan stubs.DistributorInitialState, 2)
-var workerStateUpdates = make(chan stubs.WorkerStateUpdate, 2)
+//var stateUpdateChan = make(chan stubs.InstructionResult, 1)
+//var stateRequestChan = make(chan stubs.Instruction, 1)
+//var initialStateChan = make(chan stubs.DistributorInitialState, 1)
+//var workerStateUpdates = make(chan stubs.InstructionResult, 1)
 
-type Distributor struct{}
+type Distributor struct {
+	stateUpdateChan    chan stubs.InstructionResult
+	stateRequestChan   chan stubs.Instruction
+	initialStateChan   chan stubs.DistributorInitialState
+	workerStateUpdates chan stubs.InstructionResult
+}
 
-func (d *Distributor) GetState(req bool, res *[][]byte) (err error) {
-	stateRequestChan <- true
-	*res = <-stateChan
+func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
+	d.stateRequestChan <- req
+	*res = <-d.stateUpdateChan
 	return
 }
 
 func (d *Distributor) SetInitialState(req stubs.DistributorInitialState, res *bool) (err error) {
-	initialStateChan <- req
+	d.initialStateChan <- req
 	return
 }
 
-func (d *Distributor) WorkerState(req stubs.WorkerStateUpdate, res *bool) (err error) {
-	workerStateUpdates <- req
+func (d *Distributor) WorkerState(req stubs.InstructionResult, res *bool) (err error) {
+	d.workerStateUpdates <- req
 	return
 }
 
@@ -56,7 +59,7 @@ func makeStrips(totalHeight, numStrips int) []strip {
 	return result
 }
 
-func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers []workerConnection) []strip {
+func startWorkers(p Params, currentState [][]byte, thisAddr string, workers []workerConnection) []strip {
 	numWorkers := len(workers)
 	strips := makeStrips(p.ImageHeight, numWorkers)
 	for i, worker := range workers {
@@ -67,7 +70,7 @@ func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers 
 				Height: strips[i].height,
 				Cells:  currentState[strips[i].top : strips[i].top+strips[i].height],
 			},
-			WorkerBelowAddr: workers[(i+1) % numWorkers].addr,
+			WorkerBelowAddr: workers[(i+1)%numWorkers].addr,
 			DistributorAddr: thisAddr,
 		}, nil, nil)
 		fmt.Println("sent state to worker", i)
@@ -75,77 +78,92 @@ func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers 
 	return strips
 }
 
-func fetchState(workerStrips []strip, currentState [][]byte, workers []workerConnection) {
-	fmt.Println("Fetching state")
-	workers[0].client.Call(stubs.GetWorkerState, false, nil)
-	for i := 0; i < len(workers); i++ {
-		workerState := <-workerStateUpdates
-		workerTop := workerStrips[workerState.WorkerId].top
-		workerBottom := workerTop + workerStrips[workerState.WorkerId].height
-		workerSection := currentState[workerTop:workerBottom]
-		copy(workerSection, workerState.State)
+func (d *Distributor) fetchState(workerStrips []strip, currentState [][]byte, workers []workerConnection, request stubs.Instruction) stubs.InstructionResult {
+	fmt.Println("Fetching state", request)
+	workers[0].client.Call(stubs.GetWorkerState, request, nil)
+
+	result := stubs.InstructionResult{
+		CurrentTurn:     0,
+		AliveCellsCount: 0,
 	}
-	fmt.Printf(
-		"got complete state:\n%v",
-		stubs.Grid{
-			Width: len(currentState),
+	for i := 0; i < len(workers); i++ {
+		workerState := <-d.workerStateUpdates
+		//fmt.Printf("worker %d state: %#v\n", i, workerState)
+		if request.HasFlag(stubs.GetWholeState) {
+			workerTop := workerStrips[workerState.WorkerId].top
+			workerBottom := workerTop + workerStrips[workerState.WorkerId].height
+			workerSection := currentState[workerTop:workerBottom]
+			copy(workerSection, workerState.State.Cells)
+		}
+		result.CurrentTurn = workerState.CurrentTurn
+		result.AliveCellsCount += workerState.AliveCellsCount
+	}
+
+	if request.HasFlag(stubs.GetWholeState) {
+		result.State = stubs.Grid{
+			Width:  len(currentState),
 			Height: len(currentState[0]),
-			Cells: currentState,
-		},
-	)
-	//stateChan <- make([]byte, 2)
+			Cells:  currentState,
+		}
+		//fmt.Printf("got complete state:\n%v", result.State)
+	}
+	//fmt.Printf("Compiled state update: %#v\n", result)
+	return result
 }
 
-func runDistributor(thisAddr string, workerAddrs []string) {
-	var p gol.Params
-
-	p.Threads = len(workerAddrs)
-	workers := make([]workerConnection, p.Threads)
-	for i, workerAddr := range workerAddrs {
+func connectToWorkers(workerAddrs []string) (workers []workerConnection) {
+	for _, workerAddr := range workerAddrs {
 		client, err := rpc.Dial("tcp", workerAddr)
 		if err != nil {
 			panic(fmt.Sprintf("could not connect to workerConnection at %s", workerAddr))
 		}
-		workers[i] = workerConnection{
+		workers = append(workers, workerConnection{
 			client: client,
 			addr:   workerAddr,
-		}
+		})
+	}
+	return workers
+}
+
+func (d *Distributor) run(thisAddr string, workerAddrs []string) {
+	fmt.Println("starting distributor")
+	p := Params{
+		Threads: len(workerAddrs),
 	}
 
-	fmt.Println(workers)
-
-	//var width, height int
+	workers := connectToWorkers(workerAddrs)
 
 	var workerStrips []strip
 	var currentState [][]byte
 	for {
 		select {
-		case initialState := <-initialStateChan:
+		case initialState := <-d.initialStateChan:
 			fmt.Println("Setting Initial State")
 			fmt.Println(initialState)
 			currentState = initialState.Grid.Cells
 			p.ImageWidth = initialState.Grid.Width
 			p.ImageHeight = initialState.Grid.Height
 			workerStrips = startWorkers(p, initialState.Grid.Cells, thisAddr, workers)
-		case <-stateRequestChan:
-			fetchState(workerStrips, currentState, workers)
-			stateChan <- currentState
+		case stateRequest := <-d.stateRequestChan:
+			d.stateUpdateChan <- d.fetchState(workerStrips, currentState, workers, stateRequest)
 		}
 	}
 }
 
-func main() {
-	thisAddr := flag.String("ip", "127.0.0.1:8020", "IP and port to listen on")
-	workerAddrs := flag.String("workers", "127.0.0.1:8030", "Address of broker instance")
-	flag.Parse()
-
-	rpc.Register(&Distributor{})
-	listener, _ := net.Listen("tcp", *thisAddr)
+func RunDistributor(thisAddr string, workerAddrs []string) {
+	thisDistributor := Distributor{
+		stateUpdateChan:    make(chan stubs.InstructionResult, 1),
+		stateRequestChan:   make(chan stubs.Instruction, 1),
+		initialStateChan:   make(chan stubs.DistributorInitialState, 1),
+		workerStateUpdates: make(chan stubs.InstructionResult, 1),
+	}
+	util.Check(rpc.Register(&thisDistributor))
+	listener, _ := net.Listen("tcp", thisAddr)
 	defer listener.Close()
 	go rpc.Accept(listener)
 
 	//go stubs.Serve(Distributor{}, *thisAddr)
-	runDistributor(*thisAddr, strings.Split(*workerAddrs, ","))
+	thisDistributor.run(thisAddr, workerAddrs)
 }
 
 //
