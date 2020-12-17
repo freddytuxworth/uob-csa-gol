@@ -27,6 +27,7 @@ var PauseWorker = "Worker.Pause"
 var GetWorkerState = "Worker.GetState"
 
 // distributor methods
+var WorkerTurnUpdate = "Distributor.WorkerTurn"
 var SetWorkerState = "Distributor.WorkerState"
 var GetState = "Distributor.GetState"
 var PauseDistributor = "Distributor.Pause"
@@ -41,14 +42,14 @@ type WorkerStateUpdate struct {
 	State    [][]byte
 }
 
-type RowAboveUpdate struct {
-	RowAbove           []byte
-	StateRequestWorker int
+type RowUpdate struct {
+	Row             []byte
+	ShouldSendState bool
 }
 
-type RowAboveResponse struct {
-	RowBelow []byte
-}
+//type RowAboveResponse struct {
+//	RowBelow []byte
+//}
 
 type WorkerInitialState struct {
 	WorkerId        int
