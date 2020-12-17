@@ -2,24 +2,21 @@ package gol
 
 import (
 	"fmt"
-	"net/rpc"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-//func setupIO(width, height int) (readImage func(width, height int) stubs.Grid, writeImage func(width, height int, state stubs.Grid, filename string)) {
-//	io := StartIo(Params{ImageWidth: width, ImageHeight: height})
-//	readImage = func(width, height int) [][]byte {
-//		return ReadImageToSlice(width, height, ioChannels)
-//	}
-//	writeImage = func(width, height int, state [][]byte, filename string) {
-//		WriteStateToImage(width, height, state, ioChannels, filename)
-//	}
-//	return io.
-//}
+type Controller struct {
+	thisAddr    string
+	distributor stubs.Remote
+	filename    string
+	io          ioState
+	keyPresses  chan rune
+	events      chan Event
+}
 
-func startGame(distributor *rpc.Client, grid stubs.Grid) {
-	err := distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
+func (c *Controller) startGame(grid stubs.Grid) {
+	err := c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
 		Grid: grid,
 		//ControllerAddr: thisAddr,
 	}, nil)
@@ -28,16 +25,16 @@ func startGame(distributor *rpc.Client, grid stubs.Grid) {
 	}
 }
 
-func runInstruction(distributor *rpc.Client, instruction stubs.Instruction) (result stubs.InstructionResult) {
+func runInstruction(distributor stubs.Remote, instruction stubs.Instruction) (result stubs.InstructionResult) {
 	distributor.Call(stubs.GetState, instruction, &result)
 	return result
 }
 
-func getCurrentTurn(distributor *rpc.Client) int {
+func getCurrentTurn(distributor stubs.Remote) int {
 	return runInstruction(distributor, stubs.GetCurrentTurn).CurrentTurn
 }
 
-func setProcessingPaused(distributor *rpc.Client, paused bool) int {
+func setProcessingPaused(distributor stubs.Remote, paused bool) int {
 	p := stubs.GetCurrentTurn
 	if paused {
 		p |= stubs.Pause
@@ -47,34 +44,32 @@ func setProcessingPaused(distributor *rpc.Client, paused bool) int {
 	return runInstruction(distributor, p).CurrentTurn
 }
 
-func RunController(distributorAddr string, width, height int, start bool, keyPresses chan rune, events chan Event) {
-	fmt.Println("starting controller")
-	io := StartIo()
+func (c *Controller) run() {
+	c.distributor.Connect()
 
-	distributor, _ := rpc.Dial("tcp", distributorAddr)
-
-	if start {
-		state := io.readImageToSlice(fmt.Sprintf("%dx%d", width, height))
-		startGame(distributor, state)
+	if c.filename != "" {
+		state := c.io.readImageToSlice(c.filename)
+		c.startGame(state)
 	}
+
 	ticker := time.NewTicker(2 * time.Second)
 
 	for {
 		select {
 		case <-ticker.C:
-			aliveCells := runInstruction(distributor, stubs.GetAliveCellsCount|stubs.GetCurrentTurn)
+			aliveCells := runInstruction(c.distributor, stubs.GetAliveCellsCount|stubs.GetCurrentTurn)
 			fmt.Printf("turn %d, %d alive cells\n", aliveCells.CurrentTurn, aliveCells.AliveCellsCount)
-			events <- AliveCellsCount{
+			c.events <- AliveCellsCount{
 				CompletedTurns: aliveCells.CurrentTurn,
 				CellsCount:     aliveCells.AliveCellsCount,
 			}
-		case key := <-keyPresses:
+		case key := <-c.keyPresses:
 			switch key {
 			case 'p':
-				fmt.Printf("pausing, current turn: %d\n", setProcessingPaused(distributor, true))
+				fmt.Printf("pausing, current turn: %d\n", setProcessingPaused(c.distributor, true))
 				for {
-					if <-keyPresses == 'p' {
-						fmt.Printf("resuming, current turn: %d\n", setProcessingPaused(distributor, false))
+					if <-c.keyPresses == 'p' {
+						fmt.Printf("resuming, current turn: %d\n", setProcessingPaused(c.distributor, false))
 						break
 					}
 				}
@@ -83,20 +78,34 @@ func RunController(distributorAddr string, width, height int, start bool, keyPre
 			//	os.Exit(0)
 			case 's':
 				fmt.Printf("fetching state\n")
-				state := runInstruction(distributor, stubs.GetCurrentTurn|stubs.GetWholeState)
+				state := runInstruction(c.distributor, stubs.GetCurrentTurn|stubs.GetWholeState)
 				filename := fmt.Sprintf("%dx%dx%d", state.State.Width, state.State.Height, state.CurrentTurn)
 				fmt.Printf("got state at turn %d, saving to %s\n", state.CurrentTurn, filename)
-				io.writeStateToImage(state.State, filename)
+				c.io.writeStateToImage(state.State, filename)
 			case 'k':
 				fmt.Printf("Shutting down system\n")
-				runInstruction(distributor, stubs.GetCurrentTurn|stubs.Shutdown)
+				runInstruction(c.distributor, stubs.GetCurrentTurn|stubs.Shutdown)
 			}
 		}
 		//var result [][]byte
 		//distributor.Call(stubs.GetState, stubs.GetWholeState, &result)
 		//fmt.Println("Got", result)
 	}
+}
 
+func RunController(thisAddr string, distributorAddr string, filename string, keyPresses chan rune, events chan Event) {
+	fmt.Println("starting controller")
+
+	thisController := Controller{
+		thisAddr:    thisAddr,
+		distributor: stubs.Remote{Addr: distributorAddr},
+		filename:    filename,
+		io:          StartIo(),
+		keyPresses:  keyPresses,
+		events:      events,
+	}
+
+	thisController.run()
 }
 
 func RunControllerWithArgs(args []string) {

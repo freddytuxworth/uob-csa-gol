@@ -5,7 +5,19 @@ import (
 	"net"
 	"net/rpc"
 	"strings"
+	"uk.ac.bris.cs/gameoflife/util"
 )
+
+type Remote struct {
+	*rpc.Client
+	Addr   string
+}
+
+func (c *Remote) Connect() {
+	client, err := rpc.Dial("tcp", c.Addr)
+	util.Check(err)
+	c.Client = client
+}
 
 type Grid struct {
 	Width  int
@@ -83,6 +95,7 @@ func (r RowUpdate) String() string {
 
 type WorkerInitialState struct {
 	WorkerId        int
+	MaxTurns        int
 	Grid            Grid
 	WorkerBelowAddr string
 	DistributorAddr string
@@ -94,7 +107,8 @@ func (s WorkerInitialState) String() string {
 
 type DistributorInitialState struct {
 	Grid           Grid
-	//ControllerAddr string
+	MaxTurns       int
+	ControllerAddr string
 }
 
 func (s DistributorInitialState) String() string {

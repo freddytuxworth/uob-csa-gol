@@ -14,12 +14,6 @@ import (
 func main() {
 	runtime.LockOSThread()
 
-	controllerCommand := flag.NewFlagSet("controller", flag.ExitOnError)
-	distributorAddr := controllerCommand.String("distributor", "127.0.0.1:8030", "Address of distributor instance")
-	width := controllerCommand.Int("width", -1, "Width of game board")
-	height := controllerCommand.Int("height", -1, "Height of game board")
-	start := controllerCommand.Bool("start", false, "Whether to start game (false to connect to existing game)")
-
 	switch os.Args[1] {
 	case "worker":
 		workerCommand := flag.NewFlagSet("worker", flag.ExitOnError)
@@ -29,14 +23,21 @@ func main() {
 	case "distributor":
 		distributorCommand := flag.NewFlagSet("distributor", flag.ExitOnError)
 		thisAddr := distributorCommand.String("ip", "127.0.0.1:8020", "IP and port to listen on")
-		workerAddrs := distributorCommand.String("workers", "127.0.0.1:8030", "Address of broker instance")
+		workerAddrs := distributorCommand.String("workers", "127.0.0.1:8030", "comma separated worker addresses")
 		util.Check(distributorCommand.Parse(os.Args[2:]))
 		gol.RunDistributor(*thisAddr, strings.Split(*workerAddrs, ","))
 	case "controller":
+		controllerCommand := flag.NewFlagSet("controller", flag.ExitOnError)
+		thisAddr := controllerCommand.String("ip", "127.0.0.1:8020", "IP and port to listen on")
+		distributorAddr := controllerCommand.String("distributor", "127.0.0.1:8030", "address of distributor instance")
+		filename := controllerCommand.String("filename", "", "filename to start game (empty to join existing game)")
+		//width := controllerCommand.Int("width", -1, "Width of game board")
+		//height := controllerCommand.Int("height", -1, "Height of game board")
+		//start := controllerCommand.Bool("start", false, "Whether to start game (false to connect to existing game)")
+		util.Check(controllerCommand.Parse(os.Args[2:]))
 		keyPresses := make(chan rune, 10)
 		events := make(chan gol.Event, 1000)
-		util.Check(controllerCommand.Parse(os.Args[2:]))
-		go gol.RunController(*distributorAddr, *width, *height, *start, keyPresses, events)
+		go gol.RunController(*thisAddr, *distributorAddr, *filename, keyPresses, events)
 		sdl.Start(gol.Params{0, 0, 1, 1}, events, keyPresses)
 	default:
 		panic("instance type not recognised")

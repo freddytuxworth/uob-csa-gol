@@ -13,8 +13,8 @@ import (
 type Worker struct {
 	id          int
 	currentTurn int
-	distributor *rpc.Client
-	workerBelow *rpc.Client
+	distributor stubs.Remote
+	workerBelow stubs.Remote
 
 	wrappedGrid stubs.Grid
 
@@ -27,18 +27,6 @@ type Worker struct {
 	bottomRowOut chan []byte
 }
 
-//var workerId = -1
-//var currentTurn int
-//var distributor *rpc.Client
-//var workerBelow *rpc.Client
-//
-//var stateChan = make(chan stubs.WorkerInitialState, 1)
-//var stateRequestChan = make(chan stubs.Instruction, 1)
-//
-//var rowAboveIn = make(chan stubs.RowUpdate, 1)
-//var rowBelowIn = make(chan stubs.RowUpdate, 1)
-//var topRowOut = make(chan stubs.RowUpdate, 1)
-//var bottomRowOut = make(chan []byte, 1)
 var bold = color.New(color.Bold).SprintfFunc()
 
 func (w *Worker) logf(format string, obj ...interface{}) {
@@ -123,8 +111,10 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) stubs.
 			make([]byte, initialState.Grid.Width)),
 	}
 
-	w.workerBelow, _ = rpc.Dial("tcp", initialState.WorkerBelowAddr)
-	w.distributor, _ = rpc.Dial("tcp", initialState.DistributorAddr)
+	w.workerBelow = stubs.Remote{Addr: initialState.WorkerBelowAddr}
+	w.workerBelow.Connect()
+	w.distributor = stubs.Remote{Addr: initialState.DistributorAddr}
+	w.distributor.Connect()
 
 	w.id = initialState.WorkerId
 	w.currentTurn = 0
