@@ -62,23 +62,26 @@ type WorkerStateUpdate struct {
 	State    [][]byte
 }
 
+type UpdateRequest uint8
+
+const (
+	WholeState  UpdateRequest = 1
+	AliveCells  UpdateRequest = 2
+	CurrentTurn UpdateRequest = 4
+)
+
 type RowUpdate struct {
-	Row             []byte
-	ShouldSendState bool
+	Row           []byte
+	UpdateRequest UpdateRequest
 }
 
 func (r RowUpdate) String() string {
-	return fmt.Sprintf("%v, %v", r.Row, r.ShouldSendState)
+	return fmt.Sprintf("%v, %v", r.Row, r.UpdateRequest)
 }
-
-//type RowAboveResponse struct {
-//	RowBelow []byte
-//}
 
 type WorkerInitialState struct {
 	WorkerId        int
 	Grid            Grid
-	WorkerAboveAddr string
 	WorkerBelowAddr string
 	DistributorAddr string
 }
@@ -94,8 +97,4 @@ type DistributorInitialState struct {
 
 func (s DistributorInitialState) String() string {
 	return fmt.Sprintf("size: %dx%d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.ControllerAddr, s.Grid)
-}
-
-type OperationResult struct {
-	success bool
 }

@@ -6,6 +6,7 @@ import (
 	"net/rpc"
 	"time"
 	"uk.ac.bris.cs/gameoflife/gol"
+	"uk.ac.bris.cs/gameoflife/sdl"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -62,45 +63,58 @@ func setupIO(width, height int) (readFile func(p gol.Params) [][]byte) {
 	}
 }
 
+func startGame(thisAddr string, distributor *rpc.Client, state [][]byte, width, height int) {
+	err := distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
+		Grid: stubs.Grid{
+			Width:  width,
+			Height: height,
+			Cells:  state,
+		},
+		ControllerAddr: thisAddr,
+	}, nil)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func getAliveCells(distributor *rpc.Client) gol.AliveCellsCount {
+	return gol.AliveCellsCount{
+		CompletedTurns: get,
+		CellsCount:     countAliveCells(p, currentState),
+	}
+}
+
+func getCurrentTurn(distributor *rpc.Client) int {
+
+}
+
 func main() {
 	thisAddr := flag.String("ip", "127.0.0.1:8020", "IP and port to listen on")
 	distributorAddr := flag.String("distributor", "127.0.0.1:8030", "Address of distributor instance")
 	width := flag.Int("width", 16, "Width of game board")
 	height := flag.Int("height", 16, "Height of game board")
 	flag.Parse()
-	client, _ := rpc.Dial("tcp", *distributorAddr)
+	keyPresses := make(chan rune, 10)
+	events := make(chan gol.Event, 1000)
 
 	readImage := setupIO(*width, *height)
-	//w := 16
-	//h := 9
-	//go gol.StartIo(, )
-	//
-	//state := make([][]byte, h)
-	//for y := 0; y < h; y++ {
-	//	state[y] = make([]byte, w)
-	//	for x := 0; x < w; x++ {
-	//		state[y][x] = byte(rand.Intn(2))
-	//	}
-	//}
-
 	state := readImage(gol.Params{ImageWidth: *width, ImageHeight: *height})
 
-	state = append(state[4:], state[:4]...)
-	client.Call(stubs.SetInitialState, stubs.DistributorInitialState{
-		Grid: stubs.Grid{
-			Width:  *width,
-			Height: *height,
-			Cells:  state,
-		},
-		ControllerAddr: *thisAddr,
-	}, nil)
+	distributor, _ := rpc.Dial("tcp", *distributorAddr)
+
+	startGame(*thisAddr, distributor, state, *width, *height)
+	ticker := time.NewTicker(2 * time.Second)
+
 	for {
-		time.Sleep(2 * time.Second)
-		fmt.Println("Getting state")
+		select {
+		case <-ticker.C:
+			events <- getAliveCells(distributor)
+		}
 		var result [][]byte
-		client.Call(stubs.GetState, false, &result)
+		distributor.Call(stubs.GetState, false, &result)
 		fmt.Println("Got", result)
 	}
+	sdl.Start(gol.Params{}, events, keyPresses)
 }
 
 //

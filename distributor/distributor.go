@@ -9,7 +9,6 @@ import (
 	"strings"
 	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type workerConnection struct {
@@ -68,8 +67,7 @@ func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers 
 				Height: strips[i].height,
 				Cells:  currentState[strips[i].top : strips[i].top+strips[i].height],
 			},
-			WorkerAboveAddr: workers[util.WrapNum(i-1, numWorkers)].addr,
-			WorkerBelowAddr: workers[util.WrapNum(i+1, numWorkers)].addr,
+			WorkerBelowAddr: workers[(i+1) % numWorkers].addr,
 			DistributorAddr: thisAddr,
 		}, nil, nil)
 		fmt.Println("sent state to worker", i)
