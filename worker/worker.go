@@ -6,9 +6,9 @@ import (
 	"github.com/fatih/color"
 	"net"
 	"net/rpc"
-	"time"
 	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type Worker struct{}
@@ -26,6 +26,7 @@ var rowBelowIn = make(chan stubs.RowUpdate, 1)
 var topRowOut = make(chan stubs.RowUpdate, 1)
 var bottomRowOut = make(chan []byte, 1)
 var bold = color.New(color.Bold).SprintfFunc()
+
 func log(msg string) {
 	fmt.Printf("%s%s\n",
 		bold("worker %d @ turn %d: ", workerId, currentTurn),
@@ -49,7 +50,10 @@ func (w *Worker) SetRowAbove(req stubs.RowUpdate, res *stubs.RowUpdate) (err err
 	rowAboveIn <- req
 	log("SRA: did put setrowabove req")
 	if workerId > 0 {
-		bottomRow := <-bottomRowOut
+		bottomRow := stubs.RowUpdate{
+			Row:             <-bottomRowOut,
+			ShouldSendState: req.ShouldSendState,
+		}
 		logf("SRA: did get from bottomRowOut, starting workerBelow call with %v", bottomRow)
 		var response stubs.RowUpdate
 		workerBelow.Call(stubs.SetRowAbove, bottomRow, &response)
@@ -151,7 +155,7 @@ func setupInitialState(initialState stubs.WorkerInitialState) stubs.Grid {
 		startEdgeExchange(wrappedGrid, false)
 	} else {
 		topRowOut <- stubs.RowUpdate{Row: wrappedGrid.Cells[1]}
-		bottomRowOut <- stubs.RowUpdate{Row: wrappedGrid.Cells[wrappedGrid.Height-2]}
+		bottomRowOut <- wrappedGrid.Cells[wrappedGrid.Height-2]
 	}
 
 	return wrappedGrid
@@ -181,30 +185,36 @@ func workerServer() {
 
 		rowAboveUpdate := <-rowAboveIn
 		wrappedGrid.Cells[0] = rowAboveUpdate.Row
-		if rowAboveUpdate.ShouldSendState {
-			sendState(wrappedGrid, distributor)
-		}
 
 		rowBelowUpdate := <-rowBelowIn
 		wrappedGrid.Cells[wrappedGrid.Height-1] = rowBelowUpdate.Row
 
+		if rowAboveUpdate.ShouldSendState {
+			sendState(wrappedGrid, distributor)
+		}
+
 		log("begin computing turn")
 		logf("current channel states: %d, %d, %d, %d", len(topRowOut), len(bottomRowOut), len(rowAboveIn), len(rowBelowIn))
 		logf("wrapped grid before computing:\n%v", wrappedGrid)
+
+		var cellFlips []util.Cell
 		for y := 1; y < wrappedGrid.Height-1; y++ {
 			for x := 0; x < wrappedGrid.Width; x++ {
-				wrappedGrid.Cells[y][x] = gol.ShouldSurvive(x, y, wrappedGrid)
+				shouldSurvive := gol.ShouldSurvive(x, y, wrappedGrid)
+				if shouldSurvive != wrappedGrid.Cells[y][x] {
+					cellFlips = append(cellFlips, util.Cell{X: x, Y: y})
+				}
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		for _, flip := range cellFlips {
+			wrappedGrid.Cells[flip.Y][flip.X] ^= 1
+		}
+		//time.Sleep(1 * time.Millisecond)
 		fmt.Println("completed computing turn", currentTurn)
 		currentTurn++
 		logf("wrapped grid after computing:\n%v", wrappedGrid)
 
 		if workerId == 0 {
-			if gotStateRequest {
-				sendState(wrappedGrid, distributor)
-			}
 			startEdgeExchange(wrappedGrid, gotStateRequest)
 		} else {
 			topRowOut <- stubs.RowUpdate{

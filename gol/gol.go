@@ -66,7 +66,7 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 //
 //// Run starts the processing of Game of Life. It should initialise channels and goroutines.
 //func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
-//	ioCommand := make(chan ioCommand)
+//	IoCommand := make(chan IoCommand)
 //	ioIdle := make(chan bool)
 //	ioFilename := make(chan string)
 //	ioInput := make(chan uint8)
@@ -74,7 +74,7 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 //
 //	distributorChannels := distributorChannels{
 //		events,
-//		ioCommand,
+//		IoCommand,
 //		ioIdle,
 //		ioFilename,
 //		ioOutput,
@@ -83,13 +83,13 @@ func calculateAliveCells(p Params, state [][]byte) []util.Cell {
 //	}
 //	go distributor(p, distributorChannels)
 //
-//	ioChannels := ioChannels{
-//		command:  ioCommand,
+//	ioChannels := IoChannels{
+//		Command:  IoCommand,
 //		idle:     ioIdle,
 //		filename: ioFilename,
 //		output:   ioOutput,
 //		input:    ioInput,
 //	}
-//	go startIo(p, ioChannels)
+//	go startIo(p, IoChannels)
 //	//time.Sleep(100 * time.Second)
 //}

@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"net/rpc"
 	"time"
+	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -48,28 +48,48 @@ import (
 //		return ioChannels
 //}
 
+func setupIO(width, height int) (readFile func(p gol.Params) [][]byte) {
+	ioChannels := gol.IoChannels{
+		Command:  make(chan gol.IoCommand),
+		Idle:     make(chan bool),
+		Filename: make(chan string),
+		Output:   make(chan uint8),
+		Input:    make(chan uint8),
+	}
+	go gol.StartIo(gol.Params{ImageWidth: width, ImageHeight: height}, ioChannels)
+	return func(p gol.Params) [][]byte {
+		return gol.ReadImageToSlice(p, ioChannels)
+	}
+}
+
 func main() {
 	thisAddr := flag.String("ip", "127.0.0.1:8020", "IP and port to listen on")
 	distributorAddr := flag.String("distributor", "127.0.0.1:8030", "Address of distributor instance")
+	width := flag.Int("width", 16, "Width of game board")
+	height := flag.Int("height", 16, "Height of game board")
 	flag.Parse()
-	//go serve(Worker{}, *thisAddr)
-	//workerServer()
 	client, _ := rpc.Dial("tcp", *distributorAddr)
 
-	w := 4
-	h := 9
-	state := make([][]byte, h)
-	for y := 0; y < h; y++ {
-		state[y] = make([]byte, w)
-		for x := 0; x < w; x++ {
-			state[y][x] = byte(rand.Intn(2))
-		}
-	}
+	readImage := setupIO(*width, *height)
+	//w := 16
+	//h := 9
+	//go gol.StartIo(, )
+	//
+	//state := make([][]byte, h)
+	//for y := 0; y < h; y++ {
+	//	state[y] = make([]byte, w)
+	//	for x := 0; x < w; x++ {
+	//		state[y][x] = byte(rand.Intn(2))
+	//	}
+	//}
 
+	state := readImage(gol.Params{ImageWidth: *width, ImageHeight: *height})
+
+	state = append(state[4:], state[:4]...)
 	client.Call(stubs.SetInitialState, stubs.DistributorInitialState{
 		Grid: stubs.Grid{
-			Width:  w,
-			Height: h,
+			Width:  *width,
+			Height: *height,
 			Cells:  state,
 		},
 		ControllerAddr: *thisAddr,

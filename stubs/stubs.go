@@ -29,7 +29,7 @@ func (g Grid) String() string {
 		}
 		output = append(output, fmt.Sprintf("%s %d", line, rowSum))
 	}
-	output = append(output, strings.Repeat("──", g.Width))
+	output = append(output, strings.Repeat("──", g.Width), "")
 	return strings.Join(output, "\n")
 }
 

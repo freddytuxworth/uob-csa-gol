@@ -41,7 +41,6 @@ func (d *Distributor) SetInitialState(req stubs.DistributorInitialState, res *bo
 }
 
 func (d *Distributor) WorkerState(req stubs.WorkerStateUpdate, res *bool) (err error) {
-	fmt.Println("Got worker state", req)
 	workerStateUpdates <- req
 	return
 }
@@ -83,14 +82,19 @@ func fetchState(workerStrips []strip, currentState [][]byte, workers []workerCon
 	workers[0].client.Call(stubs.GetWorkerState, false, nil)
 	for i := 0; i < len(workers); i++ {
 		workerState := <-workerStateUpdates
-		fmt.Println(workerState.Turn)
 		workerTop := workerStrips[workerState.WorkerId].top
 		workerBottom := workerTop + workerStrips[workerState.WorkerId].height
 		workerSection := currentState[workerTop:workerBottom]
 		copy(workerSection, workerState.State)
 	}
-	fmt.Println("GOT COMPLETE STATE")
-	fmt.Println(currentState)
+	fmt.Printf(
+		"got complete state:\n%v",
+		stubs.Grid{
+			Width: len(currentState),
+			Height: len(currentState[0]),
+			Cells: currentState,
+		},
+	)
 	//stateChan <- make([]byte, 2)
 }
 

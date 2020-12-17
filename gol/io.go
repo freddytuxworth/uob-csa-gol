@@ -9,23 +9,23 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-type ioChannels struct {
-	command <-chan ioCommand
-	idle    chan<- bool
+type IoChannels struct {
+	Command chan IoCommand
+	Idle    chan bool
 
-	filename <-chan string
-	output   <-chan uint8
-	input    chan<- uint8
+	Filename chan string
+	Output   chan uint8
+	Input    chan uint8
 }
 
 // ioState is the internal ioState of the io goroutine.
 type ioState struct {
 	params   Params
-	channels ioChannels
+	channels IoChannels
 }
 
-// ioCommand allows requesting behaviour from the io (pgm) goroutine.
-type ioCommand uint8
+// IoCommand allows requesting behaviour from the io (pgm) goroutine.
+type IoCommand uint8
 
 // This is a way of creating enums in Go.
 // It will evaluate to:
@@ -33,7 +33,7 @@ type ioCommand uint8
 //		ioInput 	= 1
 //		ioCheckIdle = 2
 const (
-	ioOutput ioCommand = iota
+	ioOutput IoCommand = iota
 	ioInput
 	ioCheckIdle
 )
@@ -42,7 +42,7 @@ const (
 func (io *ioState) writePgmImage() {
 	_ = os.Mkdir("out", os.ModePerm)
 
-	filename := <-io.channels.filename
+	filename := <-io.channels.Filename
 	file, ioError := os.Create("out/" + filename + ".pgm")
 	util.Check(ioError)
 	defer file.Close()
@@ -63,7 +63,7 @@ func (io *ioState) writePgmImage() {
 
 	for y := 0; y < io.params.ImageHeight; y++ {
 		for x := 0; x < io.params.ImageWidth; x++ {
-			val := <-io.channels.output
+			val := <-io.channels.Output
 			//if val != 0 {
 			//	fmt.Println(x, y)
 			//}
@@ -87,7 +87,7 @@ func (io *ioState) writePgmImage() {
 // readPgmImage opens a pgm file and sends its data as an array of bytes.
 func (io *ioState) readPgmImage() {
 	fmt.Println("Reading image!")
-	filename := <-io.channels.filename
+	filename := <-io.channels.Filename
 	data, ioError := ioutil.ReadFile("images/" + filename + ".pgm")
 	util.Check(ioError)
 
@@ -115,14 +115,14 @@ func (io *ioState) readPgmImage() {
 	image := []byte(fields[4])
 
 	for _, b := range image {
-		io.channels.input <- b
+		io.channels.Input <- b
 	}
 
 	fmt.Println("File", filename, "input done!")
 }
 
 // startIo should be the entrypoint of the io goroutine.
-func startIo(p Params, c ioChannels) {
+func StartIo(p Params, c IoChannels) {
 	io := ioState{
 		params:   p,
 		channels: c,
@@ -130,16 +130,32 @@ func startIo(p Params, c ioChannels) {
 
 	for {
 		select {
-		case command := <-io.channels.command:
-			fmt.Println("Received IO command", command)
+		case command := <-io.channels.Command:
+			fmt.Println("Received IO Command", command)
 			switch command {
 			case ioInput:
 				io.readPgmImage()
 			case ioOutput:
 				io.writePgmImage()
 			case ioCheckIdle:
-				io.channels.idle <- true
+				io.channels.Idle <- true
 			}
 		}
 	}
+}
+
+func ReadImageToSlice(p Params, c IoChannels) [][]byte {
+	c.Command <- ioInput // send ioInput command to io goroutine
+	c.Filename <- fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
+
+	loadedCells := make([][]byte, p.ImageHeight)
+	for y := range loadedCells {
+		loadedCells[y] = make([]byte, p.ImageWidth)
+		for x := range loadedCells[y] {
+			if <-c.Input > 0 {
+				loadedCells[y][x] = 1
+			}
+		}
+	}
+	return loadedCells
 }
