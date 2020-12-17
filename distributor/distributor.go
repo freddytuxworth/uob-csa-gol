@@ -12,7 +12,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-
 type workerConnection struct {
 	client *rpc.Client
 	addr   string
@@ -64,10 +63,12 @@ func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers 
 	strips := makeStrips(p.ImageHeight, numWorkers)
 	for i, worker := range workers {
 		worker.client.Go(stubs.SetState, stubs.WorkerInitialState{
-			WorkerId:        i,
-			Width:           p.ImageWidth,
-			Height:          strips[i].height,
-			Cells:           currentState[strips[i].top : strips[i].top+strips[i].height],
+			WorkerId: i,
+			Grid: stubs.Grid{
+				Width:  p.ImageWidth,
+				Height: strips[i].height,
+				Cells:  currentState[strips[i].top : strips[i].top+strips[i].height],
+			},
 			WorkerAboveAddr: workers[util.WrapNum(i-1, numWorkers)].addr,
 			WorkerBelowAddr: workers[util.WrapNum(i+1, numWorkers)].addr,
 			DistributorAddr: thisAddr,
@@ -80,7 +81,7 @@ func startWorkers(p gol.Params, currentState [][]byte, thisAddr string, workers 
 func fetchState(workerStrips []strip, currentState [][]byte, workers []workerConnection) {
 	fmt.Println("Fetching state")
 	workers[0].client.Call(stubs.GetWorkerState, false, nil)
-	for i:=0;i<len(workers);i++ {
+	for i := 0; i < len(workers); i++ {
 		workerState := <-workerStateUpdates
 		fmt.Println(workerState.Turn)
 		workerTop := workerStrips[workerState.WorkerId].top
@@ -120,10 +121,10 @@ func runDistributor(thisAddr string, workerAddrs []string) {
 		case initialState := <-initialStateChan:
 			fmt.Println("Setting Initial State")
 			fmt.Println(initialState)
-			currentState = initialState.Cells
-			p.ImageWidth = initialState.Width
-			p.ImageHeight = initialState.Height
-			workerStrips = startWorkers(p, initialState.Cells, thisAddr, workers)
+			currentState = initialState.Grid.Cells
+			p.ImageWidth = initialState.Grid.Width
+			p.ImageHeight = initialState.Grid.Height
+			workerStrips = startWorkers(p, initialState.Grid.Cells, thisAddr, workers)
 		case <-stateRequestChan:
 			fetchState(workerStrips, currentState, workers)
 			stateChan <- currentState
