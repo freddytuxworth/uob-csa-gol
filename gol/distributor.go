@@ -44,7 +44,7 @@ func (d *Distributor) GetEndState(req bool, res *stubs.InstructionResult) (err e
 }
 
 func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
-	d.sendStateRequest(req)
+	d.sendInstruction(req)
 	*res = <-d.getStateChan
 	return
 }
@@ -76,7 +76,7 @@ func (d *Distributor) startWorkers(state stubs.Grid) {
 	strips := makeStrips(state.Height, d.p.Threads)
 	for i := 0; i < d.p.Threads; i++ {
 		d.workers[i].strip = strips[i]
-		d.workers[i].Call(stubs.SetState, stubs.WorkerInitialState{
+		d.workers[i].Call("Worker.SetInitialState", stubs.WorkerInitialState{
 			WorkerId: i,
 			JobName:  d.jobName,
 			Turns:    d.p.Turns,
@@ -114,9 +114,9 @@ func (d *Distributor) combineStateUpdates() {
 	//return result
 }
 
-func (d *Distributor) sendStateRequest(request stubs.Instruction) {
+func (d *Distributor) sendInstruction(request stubs.Instruction) {
 	//d.logf("sending state request (%v)", request)
-	d.workers[0].Go(stubs.GetWorkerState, request, nil, nil)
+	d.workers[0].Go("Worker.DoInstruction", request, nil, nil)
 }
 
 func (d *Distributor) run() {

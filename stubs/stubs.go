@@ -72,14 +72,13 @@ func (g Grid) String() string {
 //}
 
 // worker methods
-var SetState = "Worker.SetState"
-var SetRowAbove = "Worker.SetRowAbove"
-var GetWorkerState = "Worker.GetState"
+//var SetState = "Worker.SetState"
+//var SetRowAbove = "Worker.SetRowAbove"
 
 // distributor methods
-var SetWorkerState = "Distributor.WorkerState"
-var GetState = "Distributor.GetState"
-var SetInitialState = "Distributor.SetInitialState"
+//var SetWorkerState = "Distributor.WorkerState"
+//var GetState = "Distributor.GetState"
+//var SetInitialState = "Distributor.SetInitialState"
 
 type InstructionResult struct {
 	//Instruction     Instruction
@@ -106,12 +105,12 @@ func (s Instruction) HasFlag(flag Instruction) bool {
 
 type RowUpdate struct {
 	//Turn         int
-	Row          []byte
-	StateRequest Instruction
+	Row         []byte
+	Instruction Instruction
 }
 
 func (r RowUpdate) String() string {
-	return fmt.Sprintf("%v, %v", r.Row, r.StateRequest)
+	return fmt.Sprintf("%v, %v", r.Row, r.Instruction)
 }
 
 type WorkerInitialState struct {

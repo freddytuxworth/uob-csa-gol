@@ -136,9 +136,15 @@ func StartIo() ioState {
 
 // synchronously write a grid to a PGM file
 func (io *ioState) writeStateToImage(state stubs.Grid, filename string) {
+	if os.Getenv("NO_FILE_WRITE") != "" {
+		fmt.Println("skipping file write for benchmark")
+		return
+	}
 	io.command <- ioOutput
 	io.filename <- filename
 	io.output <- state
+
+	io.waitUntilFinished()
 }
 
 // synchronously read a grid from a PGM file

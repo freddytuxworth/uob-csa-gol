@@ -19,8 +19,8 @@ type Worker struct {
 
 	wrappedGrid stubs.Grid
 
-	initialStates    chan stubs.WorkerInitialState
-	stateRequestChan chan stubs.Instruction
+	initialStates   chan stubs.WorkerInitialState
+	instructionChan chan stubs.Instruction
 
 	rowAboveIn chan stubs.RowUpdate
 	rowBelowIn chan stubs.RowUpdate
@@ -35,7 +35,7 @@ func (w *Worker) logf(format string, obj ...interface{}) {
 		fmt.Sprintf(format, obj...))
 }
 
-func (w *Worker) SetState(req stubs.WorkerInitialState, res *bool) (err error) {
+func (w *Worker) SetInitialState(req stubs.WorkerInitialState, res *bool) (err error) {
 	w.initialStates <- req
 	return
 }
@@ -49,37 +49,37 @@ func (w *Worker) SetRowAbove(req stubs.RowUpdate, res *stubs.RowUpdate) (err err
 	return
 }
 
-func (w *Worker) GetState(req stubs.Instruction, res *bool) (err error) {
+func (w *Worker) DoInstruction(req stubs.Instruction, res *bool) (err error) {
 	w.logf("got state request %v", req)
 	if w.id < 0 {
 		return errors.GameAlreadyFinished
 	}
-	w.stateRequestChan <- req
+	w.instructionChan <- req
 	w.logf("finished state request %v", req)
 	return
 }
 
-func (w *Worker) handleStateRequests(request stubs.Instruction) {
-	if request == 0 {
+func (w *Worker) handleInstructions(instruction stubs.Instruction) {
+	if instruction == 0 {
 		return
 	}
 	w.logf(color.GreenString("sending state"))
 	stateUpdate := stubs.InstructionResult{WorkerId: w.id}
-	if request.HasFlag(stubs.GetCurrentTurn) {
+	if instruction.HasFlag(stubs.GetCurrentTurn) {
 		stateUpdate.CurrentTurn = w.currentTurn
 	}
-	if request.HasFlag(stubs.GetWholeState) {
+	if instruction.HasFlag(stubs.GetWholeState) {
 		stateUpdate.State = stubs.Grid{
 			Width:  w.wrappedGrid.Width,
 			Height: w.wrappedGrid.Height - 2,
 			Cells:  w.wrappedGrid.Cells[1 : w.wrappedGrid.Height-1],
 		}
 	}
-	if request.HasFlag(stubs.GetAliveCellsCount) {
+	if instruction.HasFlag(stubs.GetAliveCellsCount) {
 		stateUpdate.AliveCellsCount = countAliveCells(w.wrappedGrid.Width, w.wrappedGrid.Height-2, w.wrappedGrid.Cells[1:w.wrappedGrid.Height-1])
 	}
-	w.distributor.Call(stubs.SetWorkerState, stateUpdate, nil)
-	if request.HasFlag(stubs.Pause) {
+	w.distributor.Call("Distributor.WorkerState", stateUpdate, nil)
+	if instruction.HasFlag(stubs.Pause) {
 		//TODO
 	}
 }
@@ -92,7 +92,7 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 	w.turns = initialState.Turns
 	w.jobName = initialState.JobName
 
-	w.stateRequestChan = make(chan stubs.Instruction, 1)
+	w.instructionChan = make(chan stubs.Instruction, 1)
 
 	w.rowAboveIn = make(chan stubs.RowUpdate, 1)
 	w.rowBelowIn = make(chan stubs.RowUpdate, 1)
@@ -190,11 +190,11 @@ func (w *Worker) run() {
 	w.setupInitialState(<-w.initialStates)
 
 	for {
-		var newStateRequest stubs.Instruction = 0
+		var newInstruction stubs.Instruction = 0
 		select {
 		case initialState := <-w.initialStates:
 			w.setupInitialState(initialState)
-		case newStateRequest = <-w.stateRequestChan:
+		case newInstruction = <-w.instructionChan:
 		default:
 		}
 
@@ -212,18 +212,18 @@ func (w *Worker) run() {
 		if w.id > 0 {
 			rowAboveUpdate = <-w.rowAboveIn
 		} else if w.currentTurn == w.turns {
-			newStateRequest = stubs.GetWholeState | stubs.GetCurrentTurn
+			newInstruction = stubs.GetWholeState | stubs.GetCurrentTurn
 		}
 
 		bottomRowUpdate := stubs.RowUpdate{
 			//Turn:         w.currentTurn,
-			Row:          w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
-			StateRequest: rowAboveUpdate.StateRequest | newStateRequest,
+			Row:         w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
+			Instruction: rowAboveUpdate.Instruction | newInstruction,
 		}
 
-		err := w.workerBelow.Call(stubs.SetRowAbove, bottomRowUpdate, &rowBelowUpdate)
+		err := w.workerBelow.Call("Worker.SetRowAbove", bottomRowUpdate, &rowBelowUpdate)
 		util.Check(err)
-		w.handleStateRequests(bottomRowUpdate.StateRequest)
+		w.handleInstructions(bottomRowUpdate.Instruction)
 		if w.id == 0 {
 			rowAboveUpdate = <-w.rowAboveIn
 		}

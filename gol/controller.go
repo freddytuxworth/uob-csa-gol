@@ -30,7 +30,7 @@ type Controller struct {
 //}
 
 func (c *Controller) startGame(grid stubs.Grid) {
-	util.Check(c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
+	util.Check(c.distributor.Call("Distributor.SetInitialState", stubs.DistributorInitialState{
 		JobName: c.job.Name,
 		Grid:    grid,
 		Turns:   c.job.Turns,
@@ -40,7 +40,7 @@ func (c *Controller) startGame(grid stubs.Grid) {
 }
 
 func (c *Controller) runInstruction(instruction stubs.Instruction) (result stubs.InstructionResult, err error) {
-	return result, c.distributor.Call(stubs.GetState, instruction, &result)
+	return result, c.distributor.Call("Distributor.GetState", instruction, &result)
 }
 
 func (c *Controller) saveState(state stubs.InstructionResult) {
