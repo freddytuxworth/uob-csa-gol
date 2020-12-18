@@ -1,1 +1,1 @@
-./c 4 "killall gameoflife; ./gameoflife distributor -ip :8000 -workers $(./i 1):8000,$(./i 2):8000,$(./i 3):8000"
+./c 4 "killall gameoflife; ./gameoflife distributor -ip $(./i 4) -workers $(./i 1):8000,$(./i 2):8000,$(./i 3):8000"

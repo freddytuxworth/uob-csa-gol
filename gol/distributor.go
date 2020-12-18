@@ -26,14 +26,21 @@ func (d *Distributor) logf(format string, obj ...interface{}) {
 }
 
 type Distributor struct {
-	thisAddr   string
-	jobName    string
-	controller stubs.Remote
-	p          Params
-	workers    []worker
+	thisAddr          string
+	jobName           string
+	controller        stubs.Remote
+	p                 Params
+	workers           []worker
 	combinedStateChan chan stubs.InstructionResult
 	getStateChan      chan stubs.InstructionResult
+	endStateChan      chan stubs.InstructionResult
 	initialStateChan  chan stubs.DistributorInitialState
+}
+
+func (d *Distributor) GetEndState(req bool, res *stubs.InstructionResult) (err error) {
+	*res = <-d.endStateChan
+	d.logf("sending back endstate %v", *res)
+	return
 }
 
 func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
@@ -89,7 +96,7 @@ func (d *Distributor) combineStateUpdates() {
 	d.logf("expecting results from %d workers", d.p.Threads)
 	result := stubs.InstructionResult{
 		State: stubs.Grid{
-			Width:  d.p.ImageWidth,
+ 			Width:  d.p.ImageWidth,
 			Height: d.p.ImageHeight,
 		},
 	}
@@ -125,22 +132,23 @@ func (d *Distributor) run() {
 		case initialState := <-d.initialStateChan:
 			d.jobName = initialState.JobName
 			d.logf("setting initial state")
-			d.combinedStateChan = make(chan stubs.InstructionResult, 2)
-			d.getStateChan = make(chan stubs.InstructionResult, 2)
-			d.p = Params{
-				Turns:       initialState.Turns,
-				Threads:     len(d.workers),
-				ImageWidth:  initialState.Grid.Width,
-				ImageHeight: initialState.Grid.Height,
+			for i := 0; i < len(d.workers); i++ {
+				d.workers[i].instructionResults = make(chan stubs.InstructionResult, 2)
 			}
-			d.controller = stubs.Remote{Addr: initialState.ControllerAddr}
-			d.controller.Connect()
-			d.logf("connected to controller")
+			d.combinedStateChan = make(chan stubs.InstructionResult, 1)
+			d.getStateChan = make(chan stubs.InstructionResult, 2)
+			d.endStateChan = make(chan stubs.InstructionResult, 1)
+			d.p.Turns = initialState.Turns
+			d.p.Threads = len(d.workers)
+			d.p.ImageWidth = initialState.Grid.Width
+			d.p.ImageHeight = initialState.Grid.Height
+
 			d.startWorkers(initialState.Grid)
 			go d.combineStateUpdates()
 		case state := <-d.combinedStateChan:
 			if state.CurrentTurn == d.p.Turns {
-				d.controller.Go("Controller.GameFinished", state, nil, nil)
+				d.logf("pushing endstate %v", state)
+				d.endStateChan <- state
 			}
 			d.getStateChan <- state
 			go d.combineStateUpdates()
@@ -156,11 +164,11 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 		}
 	}
 	thisDistributor := Distributor{
-		thisAddr:         thisAddr,
-		workers:          workers,
-		combinedStateChan:  make(chan stubs.InstructionResult, 2),
-		getStateChan:  make(chan stubs.InstructionResult, 2),
-		initialStateChan: make(chan stubs.DistributorInitialState, 1),
+		thisAddr:          fmt.Sprintf("%s:%d", thisAddr, 8000),
+		workers:           workers,
+		//combinedStateChan: make(chan stubs.InstructionResult, 2),
+		//getStateChan:      make(chan stubs.InstructionResult, 2),
+		initialStateChan:  make(chan stubs.DistributorInitialState, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
 	//rpc.HandleHTTP()
@@ -169,7 +177,7 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 	//	log.Fatal("listen error:", e)
 	//}
 	//go http.Serve(l, nil)
-	stubs.ServeHTTP(thisAddr)
+	stubs.ServeHTTP(8000)
 	//listener, _ := net.Listen("tcp", thisAddr)
 	//defer listener.Close()
 	//go rpc.Accept(listener)

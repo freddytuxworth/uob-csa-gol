@@ -21,18 +21,18 @@ func main() {
 	switch os.Args[1] {
 	case "worker":
 		workerCommand := flag.NewFlagSet("worker", flag.ExitOnError)
-		thisAddr := workerCommand.String("ip", "", "IP and port to listen on")
+		port := workerCommand.Int("port", 8000, "port to serve on")
 		util.Check(workerCommand.Parse(os.Args[2:]))
-		gol.RunWorker(*thisAddr)
+		gol.RunWorker(*port)
 	case "distributor":
 		distributorCommand := flag.NewFlagSet("distributor", flag.ExitOnError)
-		thisAddr := distributorCommand.String("ip", "127.0.0.1:8020", "IP and port to listen on")
+		thisAddr := distributorCommand.String("ip", "", "IP of this distributor")
 		workerAddrs := distributorCommand.String("workers", "127.0.0.1:8030", "comma separated worker addresses")
 		util.Check(distributorCommand.Parse(os.Args[2:]))
 		gol.RunDistributor(*thisAddr, strings.Split(*workerAddrs, ","))
 	case "controller":
 		controllerCommand := flag.NewFlagSet("controller", flag.ExitOnError)
-		thisAddr := controllerCommand.String("ip", "127.0.0.1:8020", "IP and port to listen on")
+		//thisAddr := controllerCommand.String("ip", "", "IP of this controller")
 		distributorAddr := controllerCommand.String("distributor", "127.0.0.1:8030", "address of distributor instance")
 		//filename := controllerCommand.String("filename", "", "filename to start game (empty to join existing game)")
 		//maxTurns := controllerCommand.Int("turns", 99999, "number of turns to run (ignored if not starting new game")
@@ -52,7 +52,7 @@ func main() {
 		}
 		keyPresses := make(chan rune, 10)
 		events := make(chan gol.Event, 1000)
-		go gol.RunController(*thisAddr, *distributorAddr, newJob, keyPresses, events)
+		go gol.RunController(*distributorAddr, newJob, keyPresses, events)
 		sdl.Start(gol.Params{0, 0, 1, 1}, events, keyPresses)
 	default:
 		panic("instance type not recognised")

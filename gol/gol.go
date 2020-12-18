@@ -17,7 +17,7 @@ type Params struct {
 func Run(p Params, events chan Event, keyPresses chan rune) {
 	filename := fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
 	RunController(
-		os.Getenv("THIS_ADDR"),
+		//os.Getenv("THIS_ADDR"),
 		os.Getenv("DISTRIBUTOR_ADDR"),
 		stubs.GolJob{
 			Name:     filename,

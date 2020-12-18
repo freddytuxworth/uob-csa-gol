@@ -16,10 +16,10 @@ type GolJob struct {
 	Turns    int
 }
 
-func ServeHTTP(thisAddr string) {
-	fmt.Printf("listening on %s\n", thisAddr)
+func ServeHTTP(port int) {
+	fmt.Printf("listening on :%d\n", port)
 	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", thisAddr)
+	l, e := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
@@ -81,11 +81,6 @@ var SetWorkerState = "Distributor.WorkerState"
 var GetState = "Distributor.GetState"
 var SetInitialState = "Distributor.SetInitialState"
 
-//var DistributorGameFinished = "Controller.GameFinished"
-
-// controller methods
-//var ControllerGameFinished = "Controller.GameFinished"
-
 type InstructionResult struct {
 	//Instruction     Instruction
 	WorkerId        int
@@ -146,17 +141,17 @@ type DistributorInitialState struct {
 	JobName        string
 	Grid           Grid
 	Turns          int
-	ControllerAddr string
+	//ControllerAddr string
 }
 
 func (s DistributorInitialState) String() string {
 	return fmt.Sprintf(
-		"job: %s, size: %dx%d, turns: %d, controller: %s\n%v",
+		"job: %s, size: %dx%d, turns: %d\n%v",
 		s.JobName,
 		s.Grid.Width,
 		s.Grid.Height,
 		s.Turns,
-		s.ControllerAddr,
+		//s.ControllerAddr,
 		s.Grid,
 	)
 }

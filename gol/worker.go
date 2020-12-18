@@ -224,11 +224,11 @@ func (w *Worker) run() {
 	w.run()
 }
 
-func RunWorker(thisAddr string) {
+func RunWorker(port int) {
 	thisWorker := Worker{initialStates: make(chan stubs.WorkerInitialState, 1)}
 
 	util.Check(rpc.Register(&thisWorker))
-	stubs.ServeHTTP(thisAddr)
+	stubs.ServeHTTP(port)
 
 	//listener, _ := net.Listen("tcp", thisAddr)
 	//defer listener.Close()

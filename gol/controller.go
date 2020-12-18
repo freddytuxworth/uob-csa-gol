@@ -22,20 +22,20 @@ type Controller struct {
 	io          ioState
 	keyPresses  chan rune
 	events      chan Event
-	gameEndChan chan stubs.InstructionResult
+	gameEndChan chan *rpc.Call
 }
 
-func (c *Controller) GameFinished(req stubs.InstructionResult, res *bool) (err error) {
-	c.gameEndChan <- req
-	return
-}
+//func (c *Controller) GameFinished(req stubs.InstructionResult, res *bool) (err error) {
+//	c.gameEndChan <- req
+//	return
+//}
 
 func (c *Controller) startGame(grid stubs.Grid) {
 	util.Check(c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
 		JobName:        c.job.Name,
 		Grid:           grid,
 		Turns:          c.job.Turns,
-		ControllerAddr: c.thisAddr,
+		//ControllerAddr: c.thisAddr,
 	}, nil))
 	c.logf("set distributor initial state")
 }
@@ -68,6 +68,9 @@ func (c *Controller) run() {
 		c.startGame(state)
 	}
 
+	var endState stubs.InstructionResult
+	c.distributor.Go("Distributor.GetEndState", false, &endState, c.gameEndChan)
+
 	ticker := time.NewTicker(2 * time.Second)
 
 	for {
@@ -77,7 +80,6 @@ func (c *Controller) run() {
 			if err != nil {
 				continue
 			}
-			//fmt.Printf("turn %d, %d alive cells\n", aliveCells.CurrentTurn, aliveCells.AliveCellsCount)
 			c.events <- AliveCellsCount{
 				CompletedTurns: aliveCells.CurrentTurn,
 				CellsCount:     aliveCells.AliveCellsCount,
@@ -123,29 +125,29 @@ func (c *Controller) run() {
 				}
 				return
 			}
-		case gameEnd := <-c.gameEndChan:
+		case <-c.gameEndChan:
 			c.logf("game finished")
-			c.saveState(gameEnd)
+			c.saveState(endState)
 			return
 		}
 	}
 }
 
-func RunController(thisAddr, distributorAddr string, job stubs.GolJob, keyPresses chan rune, events chan Event) {
+func RunController(distributorAddr string, job stubs.GolJob, keyPresses chan rune, events chan Event) {
 	thisController := Controller{
-		thisAddr:    thisAddr,
+		//thisAddr:    thisAddr,
 		distributor: stubs.Remote{Addr: distributorAddr},
 		job:         job,
 		io:          StartIo(),
 		keyPresses:  keyPresses,
 		events:      events,
-		gameEndChan: make(chan stubs.InstructionResult, 1),
+		gameEndChan: make(chan *rpc.Call, 1),
 	}
 
 	//server := rpc.NewServer()
 	//server.HandleHTTP()
-	util.Check(rpc.Register(&thisController))
-	stubs.ServeHTTP(thisAddr)
+	//util.Check(rpc.Register(&thisController))
+	//stubs.ServeHTTP(thisAddr)
 	//rpc.HandleHTTP()
 	//l, e := net.Listen("tcp", thisAddr)
 	//if e != nil {
