@@ -32,7 +32,7 @@ type Controller struct {
 func (c *Controller) startGame(grid stubs.Grid) {
 	util.Check(c.distributor.Call("Distributor.SetInitialState", stubs.DistributorInitialState{
 		JobName: c.job.Name,
-		Grid:    grid,
+		Grid:    grid.Encode(),
 		Turns:   c.job.Turns,
 		//ControllerAddr: c.thisAddr,
 	}, nil))

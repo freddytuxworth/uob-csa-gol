@@ -1,5 +1,18 @@
 #!/bin/bash
+git add gameoflife
+git commit -m "goltemp"
+git push
+
 while read IP; do
-  echo $IP
-  scp -i ~/.ssh/bristol_aws.pem ./gameoflife ubuntu@"$IP":./gameoflife
+  echo $IP killalling
+  ssh -i ~/.ssh/bristol_aws.pem ubuntu@"$IP" 'killall gameoflife; git -C uob-csa-gol/ pull' &
 done <awses
+
+wait
+
+#while read IP; do
+#  echo $IP uploading
+#  scp -i ~/.ssh/bristol_aws.pem ./gameoflife ubuntu@"$IP":./gameoflife &
+#done <awses
+#
+#wait

@@ -3,6 +3,7 @@ package gol
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -84,7 +85,7 @@ func (d *Distributor) startWorkers(state stubs.Grid) {
 				Width:  state.Width,
 				Height: d.workers[i].strip.height,
 				Cells:  state.Cells[d.workers[i].strip.top : d.workers[i].strip.top+d.workers[i].strip.height],
-			},
+			}.Encode(),
 			WorkerBelowAddr: d.workers[(i+1)%d.p.Threads].Addr,
 			DistributorAddr: d.thisAddr,
 		}, nil)
@@ -140,10 +141,11 @@ func (d *Distributor) run() {
 			d.endStateChan = make(chan stubs.InstructionResult, 1)
 			d.p.Turns = initialState.Turns
 			d.p.Threads = len(d.workers)
-			d.p.ImageWidth = initialState.Grid.Width
-			d.p.ImageHeight = initialState.Grid.Height
+			initialGrid := initialState.Grid.Decode()
+			d.p.ImageWidth = initialGrid.Width
+			d.p.ImageHeight = initialGrid.Height
 
-			d.startWorkers(initialState.Grid)
+			d.startWorkers(initialGrid)
 			go d.combineStateUpdates()
 		case state := <-d.combinedStateChan:
 			if state.CurrentTurn == d.p.Turns {
@@ -177,10 +179,10 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 	//	log.Fatal("listen error:", e)
 	//}
 	//go http.Serve(l, nil)
-	stubs.ServeHTTP(8000)
-	//listener, _ := net.Listen("tcp", thisAddr)
-	//defer listener.Close()
-	//go rpc.Accept(listener)
+	//stubs.ServeHTTP(8000)
+	listener, _ := net.Listen("tcp", ":8000")
+	defer listener.Close()
+	go rpc.Accept(listener)
 
 	//go stubs.Serve(Distributor{}, *thisAddr)
 	thisDistributor.run()

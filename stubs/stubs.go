@@ -32,7 +32,7 @@ type Remote struct {
 }
 
 func (c *Remote) Connect() {
-	client, err := rpc.DialHTTP("tcp", c.Addr)
+	client, err := rpc.Dial("tcp", c.Addr)
 	util.Check(err)
 	c.Client = client
 }
@@ -41,6 +41,37 @@ type Grid struct {
 	Width  int
 	Height int
 	Cells  [][]byte
+}
+
+type EncodedGrid struct {
+	Width  int
+	Height int
+	Data   []byte
+}
+
+func (g Grid) Encode() EncodedGrid {
+	dataBits := make([]byte, 0)
+	for _, row := range g.Cells {
+		dataBits = append(dataBits, row...)
+	}
+	return EncodedGrid{
+		Width:  g.Width,
+		Height: g.Height,
+		Data:   BitsToBytes(dataBits),
+	}
+}
+
+func (encoded EncodedGrid) Decode() Grid {
+	dataBits := BytesToBits(encoded.Data)
+	cells := make([][]byte, encoded.Height)
+	for y := 0; y < encoded.Height; y++ {
+		cells[y] = (dataBits)[y*encoded.Width : (y+1)*encoded.Width]
+	}
+	return Grid{
+		Width:  encoded.Width,
+		Height: encoded.Height,
+		Cells:  cells,
+	}
 }
 
 func (g Grid) String() string {
@@ -88,7 +119,7 @@ type InstructionResult struct {
 	State           Grid
 }
 
-type Instruction uint8
+type Instruction byte
 
 const (
 	GetCurrentTurn     Instruction = 1
@@ -103,6 +134,11 @@ func (s Instruction) HasFlag(flag Instruction) bool {
 	return s&flag != 0
 }
 
+type EncodedRowUpdate struct {
+	Length int
+	Data   []byte
+}
+
 type RowUpdate struct {
 	//Turn         int
 	Row         []byte
@@ -113,11 +149,43 @@ func (r RowUpdate) String() string {
 	return fmt.Sprintf("%v, %v", r.Row, r.Instruction)
 }
 
+func BitsToBytes(bits []byte) []byte {
+	length := len(bits)
+	out := make([]byte, length/8)
+	for i := 0; i < length; i += 1 {
+		out[i/8] += bits[i] << byte(i%8)
+	}
+	return out
+}
+
+func BytesToBits(bytes []byte) []byte {
+	length := len(bytes) * 8
+	out := make([]byte, length)
+	for i := 0; i < length; i += 1 {
+		out[i] += (bytes[i/8] >> byte(i%8)) & 1
+	}
+	return out
+}
+
+func (r RowUpdate) Encode() EncodedRowUpdate {
+	return EncodedRowUpdate{
+		Length: len(r.Row),
+		Data:   append(BitsToBytes(r.Row), byte(r.Instruction)),
+	}
+}
+
+func (encoded EncodedRowUpdate) Decode() *RowUpdate {
+	return &RowUpdate{
+		Instruction: Instruction(encoded.Data[encoded.Length/8]),
+		Row:         BytesToBits(encoded.Data[:encoded.Length/8]),
+	}
+}
+
 type WorkerInitialState struct {
 	WorkerId        int
 	JobName         string
 	Turns           int
-	Grid            Grid
+	Grid            EncodedGrid
 	WorkerBelowAddr string
 	DistributorAddr string
 }
@@ -137,9 +205,9 @@ func (s WorkerInitialState) String() string {
 }
 
 type DistributorInitialState struct {
-	JobName        string
-	Grid           Grid
-	Turns          int
+	JobName string
+	Grid    EncodedGrid
+	Turns   int
 	//ControllerAddr string
 }
 

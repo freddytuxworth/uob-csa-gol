@@ -3,6 +3,7 @@ package gol
 import (
 	"fmt"
 	"github.com/fatih/color"
+	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/errors"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -17,14 +18,14 @@ type Worker struct {
 	distributor stubs.Remote
 	workerBelow stubs.Remote
 
-	wrappedGrid stubs.Grid
+	wrappedGrid *stubs.Grid
 
-	initialStates   chan stubs.WorkerInitialState
+	initialStates   chan *stubs.WorkerInitialState
 	instructionChan chan stubs.Instruction
 
-	rowAboveIn chan stubs.RowUpdate
-	rowBelowIn chan stubs.RowUpdate
-	topRowOut  chan stubs.RowUpdate
+	rowAboveIn chan *stubs.RowUpdate
+	rowBelowIn chan *stubs.RowUpdate
+	topRowOut  chan *stubs.RowUpdate
 }
 
 var bold = color.New(color.Bold).SprintfFunc()
@@ -36,15 +37,17 @@ func (w *Worker) logf(format string, obj ...interface{}) {
 }
 
 func (w *Worker) SetInitialState(req stubs.WorkerInitialState, res *bool) (err error) {
-	w.initialStates <- req
+	w.logf("Nitial?!?")
+	w.initialStates <- &req
 	return
 }
 
-func (w *Worker) SetRowAbove(req stubs.RowUpdate, res *stubs.RowUpdate) (err error) {
+func (w *Worker) SetRowAbove(req stubs.EncodedRowUpdate, res *stubs.EncodedRowUpdate) (err error) {
 	//w.logf("SRA: got setrowabove: %v", req)
 	//w.logf("SRA: did put setrowabove req")
-	*res = <-w.topRowOut
-	w.rowAboveIn <- req
+	*res = (<-w.topRowOut).Encode()
+	//w.logf("SRA: replying with %#v", res)
+	w.rowAboveIn <- req.Decode()
 	//w.logf("SRA: did put setrowabove res: %v", *res)
 	return
 }
@@ -84,7 +87,7 @@ func (w *Worker) handleInstructions(instruction stubs.Instruction) {
 	}
 }
 
-func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
+func (w *Worker) setupInitialState(initialState *stubs.WorkerInitialState) {
 	w.logf("got initial state from distributor: %v", initialState)
 
 	w.id = initialState.WorkerId
@@ -94,16 +97,17 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 
 	w.instructionChan = make(chan stubs.Instruction, 1)
 
-	w.rowAboveIn = make(chan stubs.RowUpdate, 1)
-	w.rowBelowIn = make(chan stubs.RowUpdate, 1)
-	w.topRowOut = make(chan stubs.RowUpdate, 1)
+	w.rowAboveIn = make(chan *stubs.RowUpdate, 1)
+	w.rowBelowIn = make(chan *stubs.RowUpdate, 1)
+	w.topRowOut = make(chan *stubs.RowUpdate, 1)
 
-	w.wrappedGrid = stubs.Grid{
-		Width:  initialState.Grid.Width,
-		Height: initialState.Grid.Height + 2,
+	initialGrid := initialState.Grid.Decode()
+	w.wrappedGrid = &stubs.Grid{
+		Width:  initialGrid.Width,
+		Height: initialGrid.Height + 2,
 		Cells: append(
-			append(make([][]byte, 1), initialState.Grid.Cells...),
-			make([]byte, initialState.Grid.Width)),
+			append(make([][]byte, 1), initialGrid.Cells...),
+			make([]byte, initialGrid.Width)),
 	}
 
 	w.workerBelow = stubs.Remote{Addr: initialState.WorkerBelowAddr}
@@ -116,7 +120,7 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 	w.logf("finished setting up state")
 }
 
-func shouldSurvive(x int, y int, grid stubs.Grid) byte {
+func shouldSurvive(x int, y int, grid *stubs.Grid) byte {
 	leftX := util.WrapNum(x-1, grid.Width)
 	rightX := (x + 1) % grid.Width
 
@@ -143,7 +147,7 @@ func getAliveCells(w, h int, state [][]byte) []util.Cell {
 	var aliveCells []util.Cell
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			if state[y][x] > 0{
+			if state[y][x] > 0 {
 				aliveCells = append(aliveCells, util.Cell{X: x, Y: y})
 			}
 		}
@@ -198,30 +202,38 @@ func (w *Worker) run() {
 		default:
 		}
 
-		w.topRowOut <- stubs.RowUpdate{
+		w.topRowOut <- &stubs.RowUpdate{
 			//Turn: w.currentTurn,
 			Row: w.wrappedGrid.Cells[1],
 		}
 
-		var rowBelowUpdate stubs.RowUpdate
-		var rowAboveUpdate stubs.RowUpdate
+		var rowAboveUpdate *stubs.RowUpdate
 
 		if w.currentTurn > w.turns {
 			break
 		}
-		if w.id > 0 {
-			rowAboveUpdate = <-w.rowAboveIn
-		} else if w.currentTurn == w.turns {
-			newInstruction = stubs.GetWholeState | stubs.GetCurrentTurn
-		}
 
 		bottomRowUpdate := stubs.RowUpdate{
-			//Turn:         w.currentTurn,
 			Row:         w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
-			Instruction: rowAboveUpdate.Instruction | newInstruction,
+			Instruction: newInstruction,
 		}
 
-		err := w.workerBelow.Call("Worker.SetRowAbove", bottomRowUpdate, &rowBelowUpdate)
+		if w.id > 0 {
+			rowAboveUpdate = <-w.rowAboveIn
+			bottomRowUpdate.Instruction = rowAboveUpdate.Instruction
+		} else if w.currentTurn == w.turns {
+			bottomRowUpdate.Instruction =
+				stubs.GetWholeState | stubs.GetCurrentTurn
+		}
+
+		//bottomRowUpdate := stubs.RowUpdate{
+		//	//Turn:         w.currentTurn,
+		//	Row:         w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
+		//	Instruction: rowAboveUpdate.Instruction | newInstruction,
+		//}
+
+		var encodedRowBelowUpdate stubs.EncodedRowUpdate
+		err := w.workerBelow.Call("Worker.SetRowAbove", bottomRowUpdate.Encode(), &encodedRowBelowUpdate)
 		util.Check(err)
 		w.handleInstructions(bottomRowUpdate.Instruction)
 		if w.id == 0 {
@@ -229,7 +241,7 @@ func (w *Worker) run() {
 		}
 
 		w.wrappedGrid.Cells[0] = rowAboveUpdate.Row
-		w.wrappedGrid.Cells[w.wrappedGrid.Height-1] = rowBelowUpdate.Row
+		w.wrappedGrid.Cells[w.wrappedGrid.Height-1] = encodedRowBelowUpdate.Decode().Row
 
 		w.computeTurn()
 	}
@@ -237,14 +249,14 @@ func (w *Worker) run() {
 }
 
 func RunWorker(port int) {
-	thisWorker := Worker{initialStates: make(chan stubs.WorkerInitialState, 1)}
+	thisWorker := Worker{initialStates: make(chan *stubs.WorkerInitialState, 1)}
 
 	util.Check(rpc.Register(&thisWorker))
-	stubs.ServeHTTP(port)
+	//stubs.ServeHTTP(port)
 
-	//listener, _ := net.Listen("tcp", thisAddr)
-	//defer listener.Close()
-	//go rpc.Accept(listener)
+	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	defer listener.Close()
+	go rpc.Accept(listener)
 
 	thisWorker.run()
 	//l.Close()
