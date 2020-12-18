@@ -45,10 +45,6 @@ func (w *Worker) SetRowAbove(req stubs.RowUpdate, res *stubs.RowUpdate) (err err
 	w.logf("SRA: got setrowabove: %v", req)
 	w.rowAboveIn <- req
 	w.logf("SRA: did put setrowabove req")
-	if w.id > 0 {
-		bottomRow := <-w.bottomRowOut
-		w.rowBelowIn <- w.sendBottomRow(bottomRow, req.StateRequest)
-	}
 	*res = <-w.topRowOut
 	w.logf("SRA: did put setrowabove res: %v", *res)
 	return
@@ -60,18 +56,18 @@ func (w *Worker) GetState(req stubs.Instruction, res *bool) (err error) {
 	return
 }
 
-func (w *Worker) sendBottomRow(bottomRow []byte, stateRequest stubs.Instruction) stubs.RowUpdate {
-	w.logf("SBR %#v", w.workerBelow)
-	bottomRowUpdate := stubs.RowUpdate{
-		Row:          bottomRow,
-		StateRequest: stateRequest,
-	}
-	w.logf("starting workerBelow call with %v", bottomRow)
-	var response stubs.RowUpdate
-	w.workerBelow.Call(stubs.SetRowAbove, bottomRowUpdate, &response)
-	w.logf("done workerBelow call, got %v", response)
-	return response
-}
+//func (w *Worker) sendBottomRow(bottomRow []byte, stateRequest stubs.Instruction) stubs.RowUpdate {
+//	w.logf("SBR %#v", w.workerBelow)
+//	bottomRowUpdate := stubs.RowUpdate{
+//		Row:          bottomRow,
+//		StateRequest: stateRequest,
+//	}
+//	w.logf("starting workerBelow call with %v", bottomRow)
+//	var response stubs.RowUpdate
+//	w.workerBelow.Call(stubs.SetRowAbove, bottomRowUpdate, &response)
+//	w.logf("done workerBelow call, got %v", response)
+//	return response
+//}
 
 func (w *Worker) handleStateRequests(request stubs.Instruction) {
 	if request == 0 {
@@ -98,10 +94,10 @@ func (w *Worker) handleStateRequests(request stubs.Instruction) {
 	}
 }
 
-func (w *Worker) startEdgeExchange(stateRequest stubs.Instruction) {
-	w.topRowOut <- stubs.RowUpdate{Row: w.wrappedGrid.Cells[1]}
-	w.rowBelowIn <- w.sendBottomRow(w.wrappedGrid.Cells[w.wrappedGrid.Height-2], stateRequest)
-}
+//func (w *Worker) startEdgeExchange(stateRequest stubs.Instruction) {
+//	w.topRowOut <- stubs.RowUpdate{Row: w.wrappedGrid.Cells[1]}
+//	w.rowBelowIn <- w.sendBottomRow(w.wrappedGrid.Cells[w.wrappedGrid.Height-2], stateRequest)
+//}
 
 func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 	w.logf("got initial state from distributor: %v", initialState)
@@ -132,12 +128,12 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 	w.currentTurn = 0
 	w.maxTurns = initialState.MaxTurns
 
-	if w.id == 0 {
-		w.startEdgeExchange(0)
-	} else {
-		w.topRowOut <- stubs.RowUpdate{Row: w.wrappedGrid.Cells[1]}
-		w.bottomRowOut <- w.wrappedGrid.Cells[w.wrappedGrid.Height-2]
-	}
+	//if w.id == 0 {
+	//	w.startEdgeExchange(0)
+	//} else {
+	//	w.topRowOut <- stubs.RowUpdate{Row: w.wrappedGrid.Cells[1]}
+	//	w.bottomRowOut <- w.wrappedGrid.Cells[w.wrappedGrid.Height-2]
+	//}
 
 	w.logf("finished setting up state")
 	//return w.wrappedGrid
@@ -145,7 +141,7 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 
 func (w *Worker) computeTurn() {
 	w.logf("begin computing turn")
-	//w.logf("wrapped grid before computing:\n%v", w.wrappedGrid)
+	w.logf("wrapped grid before computing:\n%v", w.wrappedGrid)
 
 	var cellFlips []util.Cell
 	for y := 1; y < w.wrappedGrid.Height-1; y++ {
@@ -162,7 +158,7 @@ func (w *Worker) computeTurn() {
 	//time.Sleep(1 * time.Millisecond)
 	fmt.Println("completed computing turn", w.currentTurn)
 	w.currentTurn++
-	//w.logf("w.wrapped grid after computing:\n%v", w.wrappedGrid)
+	w.logf("w.wrapped grid after computing:\n%v", w.wrappedGrid)
 	time.Sleep(310 * time.Millisecond)
 }
 
@@ -173,47 +169,67 @@ func (w *Worker) run() {
 	w.setupInitialState(<-w.stateChan)
 
 	for {
-		var stateRequest stubs.Instruction = 0
+		var newStateRequest stubs.Instruction = 0
 		select {
 		case initialState := <-w.stateChan:
 			w.setupInitialState(initialState)
-		case stateRequest = <-w.stateRequestChan:
+		case newStateRequest = <-w.stateRequestChan:
 			w.logf("received state request in main loop")
 		default:
 		}
 
-		rowAboveUpdate := <-w.rowAboveIn
-		w.wrappedGrid.Cells[0] = rowAboveUpdate.Row
-
-		rowBelowUpdate := <-w.rowBelowIn
-		w.wrappedGrid.Cells[w.wrappedGrid.Height-1] = rowBelowUpdate.Row
-
-		w.handleStateRequests(rowAboveUpdate.StateRequest)
-		w.computeTurn()
-
-		if w.currentTurn > w.maxTurns {
-			break
+		w.topRowOut <- stubs.RowUpdate{
+			Row: w.wrappedGrid.Cells[1],
 		}
-		if w.id == 0 {
+
+		var rowBelowUpdate stubs.RowUpdate
+		var rowAboveUpdate stubs.RowUpdate
+
+		if w.id > 0 {
+			rowAboveUpdate = <-w.rowAboveIn
 			if w.currentTurn == w.maxTurns {
 				w.logf("game finished, sending state to distributor\n")
-				//w.distributor.Call("Distributor.GameFinished", false, nil)
-				w.startEdgeExchange(stubs.GetWholeState | stubs.GetCurrentTurn | stubs.GetAliveCellsCount)
+				newStateRequest = stubs.GetWholeState | stubs.GetCurrentTurn | stubs.GetAliveCellsCount
 			//} else if w.currentTurn > w.maxTurns {
 			//	break
-			} else {
-				w.startEdgeExchange(stateRequest)
 			}
-		} else {
-			//if rowAboveUpdate.StateRequest.HasFlag(stubs.Pause) {
-			//	continue
-			//}
-			w.topRowOut <- stubs.RowUpdate{
-				Row: w.wrappedGrid.Cells[1],
-			}
-
-			w.bottomRowOut <- w.wrappedGrid.Cells[w.wrappedGrid.Height-2]
 		}
+
+		bottomRowUpdate := stubs.RowUpdate{
+			Row:          w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
+			StateRequest: rowAboveUpdate.StateRequest | newStateRequest,
+		}
+		w.workerBelow.Call(stubs.SetRowAbove, bottomRowUpdate, &rowBelowUpdate)
+
+		if w.id == 0 {
+			rowAboveUpdate = <-w.rowAboveIn
+		}
+
+		w.wrappedGrid.Cells[0] = rowAboveUpdate.Row
+		w.wrappedGrid.Cells[w.wrappedGrid.Height-1] = rowBelowUpdate.Row
+
+		w.logf("HSR for %d", bottomRowUpdate.StateRequest)
+		w.handleStateRequests(bottomRowUpdate.StateRequest)
+		w.computeTurn()
+
+		//if w.id == 0 {
+		//	if w.currentTurn == w.maxTurns {
+		//		w.logf("game finished, sending state to distributor\n")
+		//		//w.distributor.Call("Distributor.GameFinished", false, nil)
+		//		w.startEdgeExchange(stubs.GetWholeState | stubs.GetCurrentTurn | stubs.GetAliveCellsCount)
+		//		//} else if w.currentTurn > w.maxTurns {
+		//		//	break
+		//	} else {
+		//		w.startEdgeExchange(newStateRequest)
+		//	}
+		//} else {
+		//	//if rowAboveUpdate.StateRequest.HasFlag(stubs.Pause) {
+		//	//	continue
+		//	//}
+		//	//w.topRowOut <- stubs.RowUpdate{
+		//	//	Row: w.wrappedGrid.Cells[1],
+		//	//}
+		//}
 	}
 	w.run()
 }
@@ -222,7 +238,7 @@ func RunWorker(thisAddr string) {
 	thisWorker := Worker{
 		//id:               -1,
 		//currentTurn:      -1,
-		stateChan:        make(chan stubs.WorkerInitialState, 1),
+		stateChan: make(chan stubs.WorkerInitialState, 1),
 		//stateRequestChan: make(chan stubs.Instruction, 1),
 		//
 		//rowAboveIn:   make(chan stubs.RowUpdate, 1),

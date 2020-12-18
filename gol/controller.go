@@ -71,7 +71,7 @@ func (c *Controller) run() {
 		c.startGame(state)
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 
 	for {
 		select {
