@@ -5,13 +5,15 @@ import (
 	"math"
 	"net"
 	"net/rpc"
+	"uk.ac.bris.cs/gameoflife/errors"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-type workerConnection struct {
-	client stubs.Remote
-	strip  strip
+type worker struct {
+	stubs.Remote
+	strip              strip
+	instructionResults chan stubs.InstructionResult
 }
 
 type strip struct {
@@ -19,19 +21,32 @@ type strip struct {
 	height int
 }
 
+func (d *Distributor) logf(format string, obj ...interface{}) {
+	fmt.Printf("%s	%s\n",
+		bold("distributor (%s):", d.thisAddr),
+		fmt.Sprintf(format, obj...))
+}
+
 type Distributor struct {
-	thisAddr           string
-	workers            []workerConnection
-	currentState       stubs.Grid
-	stateUpdateChan    chan stubs.InstructionResult
-	stateRequestChan   chan stubs.Instruction
-	initialStateChan   chan stubs.DistributorInitialState
-	workerStateUpdates chan stubs.InstructionResult
+	thisAddr   string
+	controller stubs.Remote
+	p          Params
+	workers    []worker
+	//currentState stubs.Grid
+	stateUpdateChan chan stubs.InstructionResult
+	//stateRequestChan chan stubs.Instruction
+	initialStateChan chan stubs.DistributorInitialState
+	//gameEndChan      chan bool
+	//workerStateUpdates chan stubs.InstructionResult
 }
 
 func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
-	d.stateRequestChan <- req
-	*res = <-d.stateUpdateChan
+	*res = d.fetchState(req)
+	if res.CurrentTurn == d.p.Turns {
+
+		d.controller.Go("Controller.GameFinished", *res, nil, nil)
+		return errors.GameAlreadyFinished
+	}
 	return
 }
 
@@ -41,9 +56,15 @@ func (d *Distributor) SetInitialState(req stubs.DistributorInitialState, res *bo
 }
 
 func (d *Distributor) WorkerState(req stubs.InstructionResult, res *bool) (err error) {
-	d.workerStateUpdates <- req
+	d.workers[req.WorkerId].instructionResults <- req
 	return
 }
+
+//func (d *Distributor) GameFinished(req bool, res *bool) (err error) {
+//	fmt.Println("game finished!")
+//	d.gameEndChan <- req
+//	return
+//}
 
 func makeStrips(totalHeight, numStrips int) []strip {
 	result := make([]strip, 0, numStrips)
@@ -57,99 +78,103 @@ func makeStrips(totalHeight, numStrips int) []strip {
 	return result
 }
 
-func (d *Distributor) startWorkers() {
-	numWorkers := len(d.workers)
-	strips := makeStrips(d.currentState.Height, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+func (d *Distributor) startWorkers(state stubs.Grid) {
+	d.logf("starting workers")
+	strips := makeStrips(state.Height, d.p.Threads)
+	for i := 0; i < d.p.Threads; i++ {
 		d.workers[i].strip = strips[i]
-		d.workers[i].client.Go(stubs.SetState, stubs.WorkerInitialState{
+		d.workers[i].Call(stubs.SetState, stubs.WorkerInitialState{
 			WorkerId: i,
+			MaxTurns: d.p.Turns,
 			Grid: stubs.Grid{
-				Width:  d.currentState.Width,
+				Width:  state.Width,
 				Height: d.workers[i].strip.height,
-				Cells:  d.currentState.Cells[d.workers[i].strip.top : d.workers[i].strip.top+d.workers[i].strip.height],
+				Cells:  state.Cells[d.workers[i].strip.top : d.workers[i].strip.top+d.workers[i].strip.height],
 			},
-			WorkerBelowAddr: d.workers[(i+1)%numWorkers].client.Addr,
+			WorkerBelowAddr: d.workers[(i+1)%d.p.Threads].Addr,
 			DistributorAddr: d.thisAddr,
-		}, nil, nil)
-		fmt.Println("sent state to worker", i)
+		}, nil)
+		d.logf("started worker %d/%d", i, d.p.Threads)
 	}
 }
 
-func (d *Distributor) fetchState(request stubs.Instruction) stubs.InstructionResult {
-	fmt.Println("Fetching state", request)
-	d.workers[0].client.Call(stubs.GetWorkerState, request, nil)
-
+func (d *Distributor) combineStateUpdates() stubs.InstructionResult {
 	result := stubs.InstructionResult{
-		CurrentTurn:     0,
-		AliveCellsCount: 0,
+		State: stubs.Grid{
+			Width:  d.p.ImageWidth,
+			Height: d.p.ImageHeight,
+		},
 	}
 	for i := 0; i < len(d.workers); i++ {
-		workerState := <-d.workerStateUpdates
-		//fmt.Printf("worker %d state: %#v\n", i, workerState)
-		if request.HasFlag(stubs.GetWholeState) {
-			workerTop := d.workers[workerState.WorkerId].strip.top
-			workerBottom := workerTop + d.workers[workerState.WorkerId].strip.height
-			workerSection := d.currentState.Cells[workerTop:workerBottom]
-			copy(workerSection, workerState.State.Cells)
+		workerState := <-d.workers[i].instructionResults
+		if workerState.State.Cells != nil {
+			result.State.Cells = append(result.State.Cells, workerState.State.Cells...)
 		}
 		result.CurrentTurn = workerState.CurrentTurn
 		result.AliveCellsCount += workerState.AliveCellsCount
 	}
 
-	if request.HasFlag(stubs.GetWholeState) {
-		result.State = d.currentState //fmt.Printf("got complete state:\n%v", result.State)
-	}
-	//fmt.Printf("Compiled state update: %#v\n", result)
 	return result
 }
 
-//func (d *Distributor) connectToWorkers() {
-//	for i := 0; i < len(d.workers); i++ {
-//		d.workers[i].client.Connect()
-//		client, err := rpc.Dial("tcp", d.workers[i].addr)
-//		if err != nil {
-//			panic(fmt.Sprintf("could not connect to workerConnection at %s", d.workers[i].addr))
-//		}
-//		d.workers[i].client = client
-//		fmt.Printf("%#v\n", d.workers[i])
-//	}
-//}
+func (d *Distributor) fetchState(request stubs.Instruction) stubs.InstructionResult {
+	d.logf("sending state request (%v)", request)
+	d.workers[0].Call(stubs.GetWorkerState, request, nil)
+
+	return d.combineStateUpdates()
+}
 
 func (d *Distributor) run() {
-	fmt.Println("starting distributor")
+	d.logf("starting distributor")
 
 	for i := 0; i < len(d.workers); i++ {
-		d.workers[i].client.Connect()
+		d.workers[i].Connect()
+		d.workers[i].instructionResults = make(chan stubs.InstructionResult, 2)
 	}
-
-	fmt.Printf("here it is: %#v\n", d)
 
 	for {
 		select {
 		case initialState := <-d.initialStateChan:
-			fmt.Println("Setting Initial State")
-			fmt.Println(initialState)
-			d.currentState = initialState.Grid
-			d.startWorkers()
-		case stateRequest := <-d.stateRequestChan:
-			d.stateUpdateChan <- d.fetchState(stateRequest)
+			d.logf("setting initial state")
+			d.p = Params{
+				Turns:       initialState.MaxTurns,
+				Threads:     len(d.workers),
+				ImageWidth:  initialState.Grid.Width,
+				ImageHeight: initialState.Grid.Height,
+			}
+			d.controller = stubs.Remote{Addr: initialState.ControllerAddr}
+			d.controller.Connect()
+			d.logf("connected to controller")
+			d.startWorkers(initialState.Grid)
+			//case stateRequest := <-d.stateRequestChan:
+			//	d.stateUpdateChan <- d.fetchState(stateRequest)
+			//case stateUpdate := <-d.stateUpdateChan:
+			//	if stateUpdate.CurrentTurn == d.p.Turns {
+			//		d.controller.Call("Controller.GameFinished", stateUpdate, nil)
+			//	} else {
+			//		d.controller.Call("Controller.GameFinished", stateUpdate, nil)
+			//	}
+			//	go d.combineStateUpdates()
+			//	//d.controller.Call("Controller.GameFinished",
+			//	//	d.combineStateUpdates(stubs.GetWholeState|stubs.GetCurrentTurn|stubs.GetAliveCellsCount), nil)
 		}
 	}
 }
 
 func RunDistributor(thisAddr string, workerAddrs []string) {
-	workers := make([]workerConnection, len(workerAddrs))
+	workers := make([]worker, len(workerAddrs))
 	for i, addr := range workerAddrs {
-		workers[i] = workerConnection{client: stubs.Remote{Addr: addr}}
+		workers[i] = worker{
+			Remote: stubs.Remote{Addr: addr},
+		}
 	}
 	thisDistributor := Distributor{
-		thisAddr:           thisAddr,
-		workers:            workers,
-		stateUpdateChan:    make(chan stubs.InstructionResult, 1),
-		stateRequestChan:   make(chan stubs.Instruction, 1),
-		initialStateChan:   make(chan stubs.DistributorInitialState, 1),
-		workerStateUpdates: make(chan stubs.InstructionResult, 1),
+		thisAddr: thisAddr,
+		workers:  workers,
+		//stateUpdateChan:    make(chan stubs.InstructionResult, 1),
+		//stateRequestChan:   make(chan stubs.Instruction, 1),
+		initialStateChan: make(chan stubs.DistributorInitialState, 1),
+		//gameEndChan:      make(chan bool, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
 	listener, _ := net.Listen("tcp", thisAddr)
@@ -159,155 +184,3 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 	//go stubs.Serve(Distributor{}, *thisAddr)
 	thisDistributor.run()
 }
-
-//
-//type distributorChannels struct {
-//	events    chan<- Event
-//	ioCommand chan<- ioCommand
-//	ioIdle    <-chan bool
-//
-//	filename   chan string
-//	output     chan<- uint8
-//	input      <-chan uint8
-//	keypresses <-chan rune
-//}
-//
-//type workerChannels struct {
-//	topEdgeIn  chan []byte
-//	topEdgeOut chan []byte
-//
-//	bottomEdgeIn  chan []byte
-//	bottomEdgeOut chan []byte
-//
-//	results chan []util.Cell
-//}
-//
-//func startWorkers(p Params, currentState [][]byte) []workerChannels {
-//	workers := make([]workerChannels, p.Threads)
-//	for thread := 0; thread < p.Threads; thread++ {
-//		workers[thread] = workerChannels{
-//			topEdgeOut:    make(chan []byte, p.Threads),
-//			bottomEdgeOut: make(chan []byte, p.Threads),
-//			results:       make(chan []util.Cell, p.Threads),
-//		}
-//	}
-//
-//	for thread := 0; thread < p.Threads; thread++ {
-//		workers[thread].topEdgeIn = workers[util.WrapNum(thread-1, p.Threads)].bottomEdgeOut
-//		workers[thread].bottomEdgeIn = workers[util.WrapNum(thread+1, p.Threads)].topEdgeOut
-//		fmt.Printf("workerConnection %d: %#v\n\n", thread, workers[thread])
-//	}
-//
-//	n := p.Threads
-//	thread := 0
-//	for i := 0; i < p.ImageHeight; {
-//		// calculate (p.ImageHeight - i) / n and round up
-//		size := int(math.Ceil(float64(p.ImageHeight-i) / float64(n)))
-//		n--
-//		go workerThread(thread, Grid{
-//			width:  p.ImageWidth,
-//			height: size,
-//			cells:  currentState[i : i+size],
-//		}, i, workers[thread])
-//		i += size
-//		thread++
-//	}
-//
-//	return workers
-//}
-//
-//func collateResults(p Params, currentState [][]byte, workers []workerChannels, events chan<- Event, turn int) {
-//	for i := 0; i < p.Threads; i++ {
-//		flippedCells := <-workers[i].results
-//		for _, cell := range flippedCells {
-//			events <- CellFlipped{
-//				CompletedTurns: turn,
-//				Cell:           cell,
-//			}
-//			currentState[cell.Y][cell.X] = 1 - currentState[cell.Y][cell.X]
-//		}
-//	}
-//}
-//
-//func readImageToSlice(p Params, c distributorChannels) [][]byte {
-//	c.ioCommand <- ioInput // send ioInput command to io goroutine
-//	c.filename <- fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
-//
-//	loadedCells := make([][]byte, p.ImageHeight)
-//	for y := range loadedCells {
-//		loadedCells[y] = make([]byte, p.ImageWidth)
-//		for x := range loadedCells[y] {
-//			if <-c.input > 0 {
-//				loadedCells[y][x] = 1
-//				c.events <- CellFlipped{
-//					CompletedTurns: 0,
-//					Cell:           util.Cell{X: x, Y: y},
-//				}
-//			}
-//		}
-//	}
-//	return loadedCells
-//}
-//
-//// send the current board data to the IO goroutine for output to an image
-//func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, turn int) {
-//	c.ioCommand <- ioOutput
-//	c.filename <- fmt.Sprintf("%dx%dx%d", p.ImageWidth, p.ImageHeight, turn)
-//	for y := 0; y < p.ImageHeight; y++ {
-//		for x := 0; x < p.ImageHeight; x++ {
-//			c.output <- currentState[y][x]
-//		}
-//	}
-//}
-//
-//// distributor divides the work between workers and interacts with other goroutines.
-//func distributor(p Params, c distributorChannels) {
-//	currentState := readImageToSlice(p, c)
-//
-//	workers := startWorkers(p, currentState)
-//	ticker := time.NewTicker(2 * time.Second)
-//
-//	for turn := 0; turn < p.Turns; {
-//		select {
-//		case <-ticker.C:
-//			c.events <- AliveCellsCount{
-//				CompletedTurns: turn,
-//				CellsCount:     countAliveCells(p, currentState),
-//			}
-//		case key := <-c.keypresses:
-//			switch key {
-//			case 'p':
-//				fmt.Println("Current turn:", turn)
-//				for {
-//					if <-c.keypresses == 'p' {
-//						break
-//					}
-//				}
-//			case 'q':
-//				writeStateToImage(p, currentState, c, turn)
-//				os.Exit(0)
-//			case 's':
-//				writeStateToImage(p, currentState, c, turn)
-//			}
-//		default:
-//			collateResults(p, currentState, workers, c.events, turn)
-//			c.events <- TurnComplete{turn + 1}
-//			//fmt.Println(turn, countAliveCells(p, currentState))
-//			turn++
-//		}
-//	}
-//
-//	c.events <- FinalTurnComplete{
-//		CompletedTurns: p.Turns,
-//		Alive:          calculateAliveCells(p, currentState),
-//	}
-//	writeStateToImage(p, currentState, c, p.Turns)
-//
-//	// Make sure that the Io has finished any output before exiting.
-//	c.ioCommand <- ioCheckIdle
-//	<-c.ioIdle
-//
-//	c.events <- StateChange{p.Turns, Quitting}
-//	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-//	close(c.events)
-//}

@@ -14,7 +14,14 @@ type Params struct {
 }
 
 func Run(p Params, events chan Event, keyPresses chan rune) {
-	RunController(os.Getenv("THIS_ADDR"), os.Getenv("DISTRIBUTOR_ADDR"), fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight), keyPresses, events)
+	RunController(
+		os.Getenv("THIS_ADDR"),
+		os.Getenv("DISTRIBUTOR_ADDR"),
+		fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight),
+		p.Turns,
+		keyPresses,
+		events,
+	)
 }
 
 //// Run starts the processing of Game of Life. It should initialise channels and goroutines.

@@ -2,7 +2,6 @@ package stubs
 
 import (
 	"fmt"
-	"net"
 	"net/rpc"
 	"strings"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -10,7 +9,7 @@ import (
 
 type Remote struct {
 	*rpc.Client
-	Addr   string
+	Addr string
 }
 
 func (c *Remote) Connect() {
@@ -45,12 +44,12 @@ func (g Grid) String() string {
 	return strings.Join(output, "\n")
 }
 
-func Serve(receiver interface{}, addr string) {
-	rpc.Register(&receiver)
-	listener, _ := net.Listen("tcp", addr)
-	defer listener.Close()
-	rpc.Accept(listener)
-}
+//func Serve(receiver interface{}, addr string) {
+//	rpc.Register(&receiver)
+//	listener, _ := net.Listen("tcp", addr)
+//	defer listener.Close()
+//	rpc.Accept(listener)
+//}
 
 // worker methods
 var SetState = "Worker.SetState"
@@ -62,7 +61,13 @@ var SetWorkerState = "Distributor.WorkerState"
 var GetState = "Distributor.GetState"
 var SetInitialState = "Distributor.SetInitialState"
 
+//var DistributorGameFinished = "Controller.GameFinished"
+
+// controller methods
+//var ControllerGameFinished = "Controller.GameFinished"
+
 type InstructionResult struct {
+	//Instruction     Instruction
 	WorkerId        int
 	CurrentTurn     int
 	AliveCellsCount int
@@ -102,7 +107,16 @@ type WorkerInitialState struct {
 }
 
 func (s WorkerInitialState) String() string {
-	return fmt.Sprintf("id: %d, size: %dx%d, worker below: %s, distributor: %s\n%v", s.WorkerId, s.Grid.Width, s.Grid.Height, s.WorkerBelowAddr, s.DistributorAddr, s.Grid)
+	return fmt.Sprintf(
+		"id: %d, size: %dx%d, max turns: %d, worker below: %s, distributor: %s\n%v",
+		s.WorkerId,
+		s.Grid.Width,
+		s.Grid.Height,
+		s.MaxTurns,
+		s.WorkerBelowAddr,
+		s.DistributorAddr,
+		s.Grid,
+	)
 }
 
 type DistributorInitialState struct {
@@ -112,5 +126,5 @@ type DistributorInitialState struct {
 }
 
 func (s DistributorInitialState) String() string {
-	return fmt.Sprintf("size: %dx%d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.Grid)
+	return fmt.Sprintf("size: %dx%d, max turns: %d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.MaxTurns, s.Grid)
 }

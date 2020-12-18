@@ -13,6 +13,7 @@ import (
 type Worker struct {
 	id          int
 	currentTurn int
+	maxTurns    int
 	distributor stubs.Remote
 	workerBelow stubs.Remote
 
@@ -30,7 +31,7 @@ type Worker struct {
 var bold = color.New(color.Bold).SprintfFunc()
 
 func (w *Worker) logf(format string, obj ...interface{}) {
-	fmt.Printf("%s%s\n",
+	fmt.Printf("%s	%s\n",
 		bold("worker %d @ turn %d: ", w.id, w.currentTurn),
 		fmt.Sprintf(format, obj...))
 }
@@ -60,6 +61,7 @@ func (w *Worker) GetState(req stubs.Instruction, res *bool) (err error) {
 }
 
 func (w *Worker) sendBottomRow(bottomRow []byte, stateRequest stubs.Instruction) stubs.RowUpdate {
+	w.logf("SBR %#v", w.workerBelow)
 	bottomRowUpdate := stubs.RowUpdate{
 		Row:          bottomRow,
 		StateRequest: stateRequest,
@@ -101,8 +103,16 @@ func (w *Worker) startEdgeExchange(stateRequest stubs.Instruction) {
 	w.rowBelowIn <- w.sendBottomRow(w.wrappedGrid.Cells[w.wrappedGrid.Height-2], stateRequest)
 }
 
-func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) stubs.Grid {
+func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) {
 	w.logf("got initial state from distributor: %v", initialState)
+
+	w.stateRequestChan = make(chan stubs.Instruction, 1)
+
+	w.rowAboveIn = make(chan stubs.RowUpdate, 1)
+	w.rowBelowIn = make(chan stubs.RowUpdate, 1)
+	w.topRowOut = make(chan stubs.RowUpdate, 1)
+	w.bottomRowOut = make(chan []byte, 1)
+
 	w.wrappedGrid = stubs.Grid{
 		Width:  initialState.Grid.Width,
 		Height: initialState.Grid.Height + 2,
@@ -113,11 +123,15 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) stubs.
 
 	w.workerBelow = stubs.Remote{Addr: initialState.WorkerBelowAddr}
 	w.workerBelow.Connect()
+	w.logf("connected to worker below")
 	w.distributor = stubs.Remote{Addr: initialState.DistributorAddr}
 	w.distributor.Connect()
+	w.logf("connected to distributor")
 
 	w.id = initialState.WorkerId
 	w.currentTurn = 0
+	w.maxTurns = initialState.MaxTurns
+
 	if w.id == 0 {
 		w.startEdgeExchange(0)
 	} else {
@@ -125,7 +139,8 @@ func (w *Worker) setupInitialState(initialState stubs.WorkerInitialState) stubs.
 		w.bottomRowOut <- w.wrappedGrid.Cells[w.wrappedGrid.Height-2]
 	}
 
-	return w.wrappedGrid
+	w.logf("finished setting up state")
+	//return w.wrappedGrid
 }
 
 func (w *Worker) computeTurn() {
@@ -152,8 +167,10 @@ func (w *Worker) computeTurn() {
 }
 
 func (w *Worker) run() {
+	w.id = -1
+	w.currentTurn = -1
 	w.logf("starting worker")
-	w.wrappedGrid = w.setupInitialState(<-w.stateChan)
+	w.setupInitialState(<-w.stateChan)
 
 	for {
 		var stateRequest stubs.Instruction = 0
@@ -174,8 +191,19 @@ func (w *Worker) run() {
 		w.handleStateRequests(rowAboveUpdate.StateRequest)
 		w.computeTurn()
 
+		if w.currentTurn > w.maxTurns {
+			break
+		}
 		if w.id == 0 {
-			w.startEdgeExchange(stateRequest)
+			if w.currentTurn == w.maxTurns {
+				w.logf("game finished, sending state to distributor\n")
+				//w.distributor.Call("Distributor.GameFinished", false, nil)
+				w.startEdgeExchange(stubs.GetWholeState | stubs.GetCurrentTurn | stubs.GetAliveCellsCount)
+			//} else if w.currentTurn > w.maxTurns {
+			//	break
+			} else {
+				w.startEdgeExchange(stateRequest)
+			}
 		} else {
 			//if rowAboveUpdate.StateRequest.HasFlag(stubs.Pause) {
 			//	continue
@@ -187,20 +215,23 @@ func (w *Worker) run() {
 			w.bottomRowOut <- w.wrappedGrid.Cells[w.wrappedGrid.Height-2]
 		}
 	}
+	w.run()
 }
 
 func RunWorker(thisAddr string) {
 	thisWorker := Worker{
-		id: -1,
-		currentTurn:  -1,
-		stateChan: make(chan stubs.WorkerInitialState, 1),
-		stateRequestChan: make(chan stubs.Instruction, 1),
-
-		rowAboveIn: make(chan stubs.RowUpdate, 1),
-		rowBelowIn: make(chan stubs.RowUpdate, 1),
-		topRowOut: make(chan stubs.RowUpdate, 1),
-		bottomRowOut: make(chan []byte, 1),
+		//id:               -1,
+		//currentTurn:      -1,
+		stateChan:        make(chan stubs.WorkerInitialState, 1),
+		//stateRequestChan: make(chan stubs.Instruction, 1),
+		//
+		//rowAboveIn:   make(chan stubs.RowUpdate, 1),
+		//rowBelowIn:   make(chan stubs.RowUpdate, 1),
+		//topRowOut:    make(chan stubs.RowUpdate, 1),
+		//bottomRowOut: make(chan []byte, 1),
 	}
+
+	//go stubs.Serve(&thisWorker, thisAddr)
 	util.Check(rpc.Register(&thisWorker))
 	listener, _ := net.Listen("tcp", thisAddr)
 	defer listener.Close()
