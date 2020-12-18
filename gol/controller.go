@@ -14,7 +14,6 @@ func (c *Controller) logf(format string, obj ...interface{}) {
 		fmt.Sprintf(format, obj...))
 }
 
-
 type Controller struct {
 	thisAddr    string
 	distributor stubs.Remote
@@ -32,9 +31,9 @@ type Controller struct {
 
 func (c *Controller) startGame(grid stubs.Grid) {
 	util.Check(c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
-		JobName:        c.job.Name,
-		Grid:           grid,
-		Turns:          c.job.Turns,
+		JobName: c.job.Name,
+		Grid:    grid,
+		Turns:   c.job.Turns,
 		//ControllerAddr: c.thisAddr,
 	}, nil))
 	c.logf("set distributor initial state")
@@ -59,12 +58,25 @@ func (c *Controller) stop() {
 
 func (c *Controller) run() {
 	c.logf("starting controller")
-	c.distributor.Connect()
-	c.logf("connected to distributor")
 
-	if c.job.Turns != 0 {
+	if c.job.Filename != "" {
 		state := c.io.readImageToSlice(c.job.Filename)
 		c.logf("read state from %s", c.job.Filename)
+		if c.job.Turns < 1 {
+			c.saveState(stubs.InstructionResult{
+				CurrentTurn:     0,
+				State:           state,
+			})
+			c.events <- FinalTurnComplete{
+				CompletedTurns: 0,
+				Alive:          getAliveCells(state.Width, state.Height, state.Cells),
+			}
+			return
+		}
+
+		c.distributor.Connect()
+		c.logf("connected to distributor")
+
 		c.startGame(state)
 	}
 
@@ -93,7 +105,8 @@ func (c *Controller) run() {
 					continue
 				}
 				c.logf("paused, current turn: %d", state.CurrentTurn)
-				for <-c.keyPresses != 'p' {}
+				for <-c.keyPresses != 'p' {
+				}
 				state, err = c.runInstruction(stubs.GetCurrentTurn | stubs.Resume)
 				util.Check(err)
 				c.logf("resumed, current turn: %d", state.CurrentTurn)
@@ -127,6 +140,10 @@ func (c *Controller) run() {
 			}
 		case <-c.gameEndChan:
 			c.logf("game finished")
+			c.events <- FinalTurnComplete{
+				CompletedTurns: endState.CurrentTurn,
+				Alive:          getAliveCells(endState.State.Width, endState.State.Height, endState.State.Cells),
+			}
 			c.saveState(endState)
 			return
 		}

@@ -139,6 +139,18 @@ func shouldSurvive(x int, y int, grid stubs.Grid) byte {
 	return 0
 }
 
+func getAliveCells(w, h int, state [][]byte) []util.Cell {
+	var aliveCells []util.Cell
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if state[y][x] > 0{
+				aliveCells = append(aliveCells, util.Cell{X: x, Y: y})
+			}
+		}
+	}
+	return aliveCells
+}
+
 func countAliveCells(w, h int, state [][]byte) int {
 	aliveCells := 0
 	for y := 0; y < h; y++ {
@@ -200,7 +212,7 @@ func (w *Worker) run() {
 		if w.id > 0 {
 			rowAboveUpdate = <-w.rowAboveIn
 		} else if w.currentTurn == w.turns {
-			newStateRequest = stubs.GetWholeState | stubs.GetCurrentTurn | stubs.GetAliveCellsCount
+			newStateRequest = stubs.GetWholeState | stubs.GetCurrentTurn
 		}
 
 		bottomRowUpdate := stubs.RowUpdate{

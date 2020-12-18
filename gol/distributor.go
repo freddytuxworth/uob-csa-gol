@@ -96,7 +96,7 @@ func (d *Distributor) combineStateUpdates() {
 	d.logf("expecting results from %d workers", d.p.Threads)
 	result := stubs.InstructionResult{
 		State: stubs.Grid{
- 			Width:  d.p.ImageWidth,
+			Width:  d.p.ImageWidth,
 			Height: d.p.ImageHeight,
 		},
 	}
@@ -164,11 +164,11 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 		}
 	}
 	thisDistributor := Distributor{
-		thisAddr:          fmt.Sprintf("%s:%d", thisAddr, 8000),
-		workers:           workers,
+		thisAddr: fmt.Sprintf("%s:%d", thisAddr, 8000),
+		workers:  workers,
 		//combinedStateChan: make(chan stubs.InstructionResult, 2),
 		//getStateChan:      make(chan stubs.InstructionResult, 2),
-		initialStateChan:  make(chan stubs.DistributorInitialState, 1),
+		initialStateChan: make(chan stubs.DistributorInitialState, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
 	//rpc.HandleHTTP()
