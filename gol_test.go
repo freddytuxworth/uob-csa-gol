@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"testing"
+	"time"
 	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -22,22 +23,23 @@ func TestGol(t *testing.T) {
 				p.ImageWidth,
 				p.ImageHeight,
 			)
-			for threads := 1; threads <= 16; threads++ {
-				p.Threads = threads
-				testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
-				t.Run(testName, func(t *testing.T) {
-					events := make(chan gol.Event)
-					gol.Run(p, events, nil)
-					var cells []util.Cell
-					for event := range events {
-						switch e := event.(type) {
-						case gol.FinalTurnComplete:
-							cells = e.Alive
-						}
+			//for threads := 1; threads <= 16; threads++ {
+			//	p.Threads = threads
+			testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
+			t.Run(testName, func(t *testing.T) {
+				events := make(chan gol.Event)
+				gol.Run(p, events, nil)
+				var cells []util.Cell
+				for event := range events {
+					switch e := event.(type) {
+					case gol.FinalTurnComplete:
+						cells = e.Alive
 					}
-					assertEqualBoard(t, cells, expectedAlive, p)
-				})
-			}
+				}
+				assertEqualBoard(t, cells, expectedAlive, p)
+			})
+			time.Sleep(50 * time.Millisecond)
+			//}
 		}
 	}
 }
