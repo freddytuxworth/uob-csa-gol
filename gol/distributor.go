@@ -3,7 +3,6 @@ package gol
 import (
 	"fmt"
 	"math"
-	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -38,15 +37,14 @@ type Distributor struct {
 	initialStateChan  chan stubs.DistributorInitialState
 }
 
-func (d *Distributor) GetEndState(req bool, res *stubs.InstructionResult) (err error) {
-	*res = <-d.endStateChan
-	d.logf("sending back endstate %v", *res)
+func (d *Distributor) GetEndState(req bool, res *stubs.EncodedInstructionResult) (err error) {
+	*res = (<-d.endStateChan).Encode()
 	return
 }
 
-func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
+func (d *Distributor) GetState(req stubs.Instruction, res *stubs.EncodedInstructionResult) (err error) {
 	d.sendInstruction(req)
-	*res = <-d.getStateChan
+	*res = (<-d.getStateChan).Encode()
 	return
 }
 
@@ -55,8 +53,8 @@ func (d *Distributor) SetInitialState(req stubs.DistributorInitialState, res *bo
 	return
 }
 
-func (d *Distributor) WorkerState(req stubs.InstructionResult, res *bool) (err error) {
-	d.workers[req.WorkerId].instructionResults <- req
+func (d *Distributor) WorkerState(req stubs.EncodedInstructionResult, res *bool) (err error) {
+	d.workers[req.WorkerId].instructionResults <- req.Decode()
 	return
 }
 
@@ -75,7 +73,7 @@ func makeStrips(totalHeight, numStrips int) []strip {
 func (d *Distributor) startWorkers(state stubs.Grid) {
 	d.logf("starting workers")
 	strips := makeStrips(state.Height, d.p.Threads)
-	for i := 0; i < d.p.Threads; i++ {
+	for i := d.p.Threads-1; i >= 0; i-- {
 		d.workers[i].strip = strips[i]
 		d.workers[i].Call("Worker.SetInitialState", stubs.WorkerInitialState{
 			WorkerId: i,
@@ -173,18 +171,11 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 		initialStateChan: make(chan stubs.DistributorInitialState, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
-	//rpc.HandleHTTP()
-	//l, e := net.Listen("tcp", thisAddr)
-	//if e != nil {
-	//	log.Fatal("listen error:", e)
-	//}
-	//go http.Serve(l, nil)
-	//stubs.ServeHTTP(8000)
-	listener, _ := net.Listen("tcp", ":8000")
-	defer listener.Close()
-	go rpc.Accept(listener)
+	stubs.ServeHTTP(8000)
+	//listener, _ := net.Listen("tcp", ":8000")
+	//defer listener.Close()
+	//go rpc.Accept(listener)
 
 	//go stubs.Serve(Distributor{}, *thisAddr)
 	thisDistributor.run()
-	//l.Close()
 }

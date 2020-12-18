@@ -3,7 +3,6 @@ package gol
 import (
 	"fmt"
 	"github.com/fatih/color"
-	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/errors"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -37,7 +36,6 @@ func (w *Worker) logf(format string, obj ...interface{}) {
 }
 
 func (w *Worker) SetInitialState(req stubs.WorkerInitialState, res *bool) (err error) {
-	w.logf("Nitial?!?")
 	w.initialStates <- &req
 	return
 }
@@ -53,8 +51,8 @@ func (w *Worker) SetRowAbove(req stubs.EncodedRowUpdate, res *stubs.EncodedRowUp
 }
 
 func (w *Worker) DoInstruction(req stubs.Instruction, res *bool) (err error) {
-	w.logf("got state request %v", req)
 	if w.id < 0 {
+		w.logf("discarded state request %v, game already finished", req)
 		return errors.GameAlreadyFinished
 	}
 	w.instructionChan <- req
@@ -81,14 +79,14 @@ func (w *Worker) handleInstructions(instruction stubs.Instruction) {
 	if instruction.HasFlag(stubs.GetAliveCellsCount) {
 		stateUpdate.AliveCellsCount = countAliveCells(w.wrappedGrid.Width, w.wrappedGrid.Height-2, w.wrappedGrid.Cells[1:w.wrappedGrid.Height-1])
 	}
-	w.distributor.Call("Distributor.WorkerState", stateUpdate, nil)
+	w.distributor.Call("Distributor.WorkerState", stateUpdate.Encode(), nil)
 	if instruction.HasFlag(stubs.Pause) {
 		//TODO
 	}
 }
 
 func (w *Worker) setupInitialState(initialState *stubs.WorkerInitialState) {
-	w.logf("got initial state from distributor: %v", initialState)
+	w.logf("got initial state from distributor")
 
 	w.id = initialState.WorkerId
 	w.currentTurn = 0
@@ -96,7 +94,6 @@ func (w *Worker) setupInitialState(initialState *stubs.WorkerInitialState) {
 	w.jobName = initialState.JobName
 
 	w.instructionChan = make(chan stubs.Instruction, 1)
-
 	w.rowAboveIn = make(chan *stubs.RowUpdate, 1)
 	w.rowBelowIn = make(chan *stubs.RowUpdate, 1)
 	w.topRowOut = make(chan *stubs.RowUpdate, 1)
@@ -167,7 +164,9 @@ func countAliveCells(w, h int, state [][]byte) int {
 }
 
 func (w *Worker) computeTurn() {
-	w.logf("begin computing turn %d", w.currentTurn)
+	if w.currentTurn%10 == 0 {
+		w.logf("begin computing turn %d", w.currentTurn)
+	}
 	//w.logf("wrapped grid before computing:\n%v", w.wrappedGrid)
 
 	var cellFlips []util.Cell
@@ -202,10 +201,7 @@ func (w *Worker) run() {
 		default:
 		}
 
-		w.topRowOut <- &stubs.RowUpdate{
-			//Turn: w.currentTurn,
-			Row: w.wrappedGrid.Cells[1],
-		}
+		w.topRowOut <- &stubs.RowUpdate{Row: w.wrappedGrid.Cells[1]}
 
 		var rowAboveUpdate *stubs.RowUpdate
 
@@ -224,13 +220,8 @@ func (w *Worker) run() {
 		} else if w.currentTurn == w.turns {
 			bottomRowUpdate.Instruction =
 				stubs.GetWholeState | stubs.GetCurrentTurn
+			w.handleInstructions(bottomRowUpdate.Instruction)
 		}
-
-		//bottomRowUpdate := stubs.RowUpdate{
-		//	//Turn:         w.currentTurn,
-		//	Row:         w.wrappedGrid.Cells[w.wrappedGrid.Height-2],
-		//	Instruction: rowAboveUpdate.Instruction | newInstruction,
-		//}
 
 		var encodedRowBelowUpdate stubs.EncodedRowUpdate
 		err := w.workerBelow.Call("Worker.SetRowAbove", bottomRowUpdate.Encode(), &encodedRowBelowUpdate)
@@ -249,15 +240,20 @@ func (w *Worker) run() {
 }
 
 func RunWorker(port int) {
-	thisWorker := Worker{initialStates: make(chan *stubs.WorkerInitialState, 1)}
+	thisWorker := Worker{
+		//instructionChan: make(chan stubs.Instruction, 1),
+		//rowAboveIn: make(chan *stubs.RowUpdate, 1),
+		//rowBelowIn: make(chan *stubs.RowUpdate, 1),
+		//topRowOut: make(chan *stubs.RowUpdate, 1),
+		initialStates: make(chan *stubs.WorkerInitialState, 1),
+	}
 
 	util.Check(rpc.Register(&thisWorker))
-	//stubs.ServeHTTP(port)
+	stubs.ServeHTTP(port)
 
-	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	defer listener.Close()
-	go rpc.Accept(listener)
+	//listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	//defer listener.Close()
+	//go rpc.Accept(listener)
 
 	thisWorker.run()
-	//l.Close()
 }

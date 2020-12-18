@@ -32,7 +32,7 @@ type Remote struct {
 }
 
 func (c *Remote) Connect() {
-	client, err := rpc.Dial("tcp", c.Addr)
+	client, err := rpc.DialHTTP("tcp", c.Addr)
 	util.Check(err)
 	c.Client = client
 }
@@ -112,11 +112,35 @@ func (g Grid) String() string {
 //var SetInitialState = "Distributor.SetInitialState"
 
 type InstructionResult struct {
-	//Instruction     Instruction
 	WorkerId        int
 	CurrentTurn     int
 	AliveCellsCount int
 	State           Grid
+}
+
+func (i InstructionResult) Encode() EncodedInstructionResult {
+	return EncodedInstructionResult{
+		WorkerId: i.WorkerId,
+		CurrentTurn: i.CurrentTurn,
+		AliveCellsCount: i.AliveCellsCount,
+		State: i.State.Encode(),
+	}
+}
+
+type EncodedInstructionResult struct {
+	WorkerId        int
+	CurrentTurn     int
+	AliveCellsCount int
+	State EncodedGrid
+}
+
+func (encoded EncodedInstructionResult) Decode() InstructionResult {
+	return InstructionResult{
+		WorkerId: encoded.WorkerId,
+		CurrentTurn: encoded.CurrentTurn,
+		AliveCellsCount: encoded.AliveCellsCount,
+		State: encoded.State.Decode(),
+	}
 }
 
 type Instruction byte

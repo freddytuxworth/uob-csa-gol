@@ -24,11 +24,6 @@ type Controller struct {
 	gameEndChan chan *rpc.Call
 }
 
-//func (c *Controller) GameFinished(req stubs.InstructionResult, res *bool) (err error) {
-//	c.gameEndChan <- req
-//	return
-//}
-
 func (c *Controller) startGame(grid stubs.Grid) {
 	util.Check(c.distributor.Call("Distributor.SetInitialState", stubs.DistributorInitialState{
 		JobName: c.job.Name,
@@ -80,7 +75,7 @@ func (c *Controller) run() {
 		c.startGame(state)
 	}
 
-	var endState stubs.InstructionResult
+	var endState stubs.EncodedInstructionResult
 	c.distributor.Go("Distributor.GetEndState", false, &endState, c.gameEndChan)
 
 	ticker := time.NewTicker(2 * time.Second)
@@ -140,11 +135,12 @@ func (c *Controller) run() {
 			}
 		case <-c.gameEndChan:
 			c.logf("game finished")
+			decodedEndState := endState.Decode()
 			c.events <- FinalTurnComplete{
 				CompletedTurns: endState.CurrentTurn,
-				Alive:          getAliveCells(endState.State.Width, endState.State.Height, endState.State.Cells),
+				Alive:          getAliveCells(endState.State.Width, endState.State.Height, decodedEndState.State.Cells),
 			}
-			c.saveState(endState)
+			c.saveState(decodedEndState)
 			return
 		}
 	}
