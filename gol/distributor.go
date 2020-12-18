@@ -3,9 +3,7 @@ package gol
 import (
 	"fmt"
 	"math"
-	"net"
 	"net/rpc"
-	"uk.ac.bris.cs/gameoflife/errors"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -23,30 +21,24 @@ type strip struct {
 
 func (d *Distributor) logf(format string, obj ...interface{}) {
 	fmt.Printf("%s	%s\n",
-		bold("distributor (%s):", d.thisAddr),
+		bold("[%s] distributor (%s):", d.jobName, d.thisAddr),
 		fmt.Sprintf(format, obj...))
 }
 
 type Distributor struct {
 	thisAddr   string
+	jobName    string
 	controller stubs.Remote
 	p          Params
 	workers    []worker
-	//currentState stubs.Grid
-	stateUpdateChan chan stubs.InstructionResult
-	//stateRequestChan chan stubs.Instruction
-	initialStateChan chan stubs.DistributorInitialState
-	//gameEndChan      chan bool
-	//workerStateUpdates chan stubs.InstructionResult
+	combinedStateChan chan stubs.InstructionResult
+	getStateChan      chan stubs.InstructionResult
+	initialStateChan  chan stubs.DistributorInitialState
 }
 
 func (d *Distributor) GetState(req stubs.Instruction, res *stubs.InstructionResult) (err error) {
-	*res = d.fetchState(req)
-	if res.CurrentTurn == d.p.Turns {
-
-		d.controller.Go("Controller.GameFinished", *res, nil, nil)
-		return errors.GameAlreadyFinished
-	}
+	d.sendStateRequest(req)
+	*res = <-d.getStateChan
 	return
 }
 
@@ -59,12 +51,6 @@ func (d *Distributor) WorkerState(req stubs.InstructionResult, res *bool) (err e
 	d.workers[req.WorkerId].instructionResults <- req
 	return
 }
-
-//func (d *Distributor) GameFinished(req bool, res *bool) (err error) {
-//	fmt.Println("game finished!")
-//	d.gameEndChan <- req
-//	return
-//}
 
 func makeStrips(totalHeight, numStrips int) []strip {
 	result := make([]strip, 0, numStrips)
@@ -85,7 +71,8 @@ func (d *Distributor) startWorkers(state stubs.Grid) {
 		d.workers[i].strip = strips[i]
 		d.workers[i].Call(stubs.SetState, stubs.WorkerInitialState{
 			WorkerId: i,
-			MaxTurns: d.p.Turns,
+			JobName:  d.jobName,
+			Turns:    d.p.Turns,
 			Grid: stubs.Grid{
 				Width:  state.Width,
 				Height: d.workers[i].strip.height,
@@ -98,30 +85,31 @@ func (d *Distributor) startWorkers(state stubs.Grid) {
 	}
 }
 
-func (d *Distributor) combineStateUpdates() stubs.InstructionResult {
+func (d *Distributor) combineStateUpdates() {
+	d.logf("expecting results from %d workers", d.p.Threads)
 	result := stubs.InstructionResult{
 		State: stubs.Grid{
 			Width:  d.p.ImageWidth,
 			Height: d.p.ImageHeight,
 		},
 	}
-	for i := 0; i < len(d.workers); i++ {
+	for i := 0; i < d.p.Threads; i++ {
 		workerState := <-d.workers[i].instructionResults
+		//d.logf("got elem for channel %d", i)
 		if workerState.State.Cells != nil {
 			result.State.Cells = append(result.State.Cells, workerState.State.Cells...)
 		}
 		result.CurrentTurn = workerState.CurrentTurn
 		result.AliveCellsCount += workerState.AliveCellsCount
 	}
-
-	return result
+	//d.logf("finished collecting, result: %#v", result)
+	d.combinedStateChan <- result
+	//return result
 }
 
-func (d *Distributor) fetchState(request stubs.Instruction) stubs.InstructionResult {
-	d.logf("sending state request (%v)", request)
-	d.workers[0].Call(stubs.GetWorkerState, request, nil)
-
-	return d.combineStateUpdates()
+func (d *Distributor) sendStateRequest(request stubs.Instruction) {
+	//d.logf("sending state request (%v)", request)
+	d.workers[0].Go(stubs.GetWorkerState, request, nil, nil)
 }
 
 func (d *Distributor) run() {
@@ -131,13 +119,16 @@ func (d *Distributor) run() {
 		d.workers[i].Connect()
 		d.workers[i].instructionResults = make(chan stubs.InstructionResult, 2)
 	}
-
+	d.logf("connected to %d workers", len(d.workers))
 	for {
 		select {
 		case initialState := <-d.initialStateChan:
+			d.jobName = initialState.JobName
 			d.logf("setting initial state")
+			d.combinedStateChan = make(chan stubs.InstructionResult, 2)
+			d.getStateChan = make(chan stubs.InstructionResult, 2)
 			d.p = Params{
-				Turns:       initialState.MaxTurns,
+				Turns:       initialState.Turns,
 				Threads:     len(d.workers),
 				ImageWidth:  initialState.Grid.Width,
 				ImageHeight: initialState.Grid.Height,
@@ -146,17 +137,13 @@ func (d *Distributor) run() {
 			d.controller.Connect()
 			d.logf("connected to controller")
 			d.startWorkers(initialState.Grid)
-			//case stateRequest := <-d.stateRequestChan:
-			//	d.stateUpdateChan <- d.fetchState(stateRequest)
-			//case stateUpdate := <-d.stateUpdateChan:
-			//	if stateUpdate.CurrentTurn == d.p.Turns {
-			//		d.controller.Call("Controller.GameFinished", stateUpdate, nil)
-			//	} else {
-			//		d.controller.Call("Controller.GameFinished", stateUpdate, nil)
-			//	}
-			//	go d.combineStateUpdates()
-			//	//d.controller.Call("Controller.GameFinished",
-			//	//	d.combineStateUpdates(stubs.GetWholeState|stubs.GetCurrentTurn|stubs.GetAliveCellsCount), nil)
+			go d.combineStateUpdates()
+		case state := <-d.combinedStateChan:
+			if state.CurrentTurn == d.p.Turns {
+				d.controller.Go("Controller.GameFinished", state, nil, nil)
+			}
+			d.getStateChan <- state
+			go d.combineStateUpdates()
 		}
 	}
 }
@@ -169,18 +156,25 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 		}
 	}
 	thisDistributor := Distributor{
-		thisAddr: thisAddr,
-		workers:  workers,
-		//stateUpdateChan:    make(chan stubs.InstructionResult, 1),
-		//stateRequestChan:   make(chan stubs.Instruction, 1),
+		thisAddr:         thisAddr,
+		workers:          workers,
+		combinedStateChan:  make(chan stubs.InstructionResult, 2),
+		getStateChan:  make(chan stubs.InstructionResult, 2),
 		initialStateChan: make(chan stubs.DistributorInitialState, 1),
-		//gameEndChan:      make(chan bool, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
-	listener, _ := net.Listen("tcp", thisAddr)
-	defer listener.Close()
-	go rpc.Accept(listener)
+	//rpc.HandleHTTP()
+	//l, e := net.Listen("tcp", thisAddr)
+	//if e != nil {
+	//	log.Fatal("listen error:", e)
+	//}
+	//go http.Serve(l, nil)
+	stubs.ServeHTTP(thisAddr)
+	//listener, _ := net.Listen("tcp", thisAddr)
+	//defer listener.Close()
+	//go rpc.Accept(listener)
 
 	//go stubs.Serve(Distributor{}, *thisAddr)
 	thisDistributor.run()
+	//l.Close()
 }

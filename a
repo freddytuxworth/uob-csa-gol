@@ -1,0 +1,5 @@
+#!/bin/bash
+while read IP; do
+  echo $IP
+  ssh -n -i ~/.ssh/bristol_aws.pem ubuntu@$IP $1
+done <awses

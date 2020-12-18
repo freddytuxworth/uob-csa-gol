@@ -1,0 +1,5 @@
+#!/bin/bash
+while read IP; do
+  echo $IP
+  scp -i ~/.ssh/bristol_aws.pem ./gameoflife ubuntu@"$IP":./gameoflife
+done <awses

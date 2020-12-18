@@ -1,0 +1,6 @@
+#!/bin/bash
+#IP=$( sed "$1q;d" awses )
+#PORT=$2
+#echo "ubuntu@$IP"
+#scp -i ~/.ssh/bristol_aws.pem ./gameoflife ubuntu@"$IP":./gameoflife
+./c "$1" "./gameoflife worker -ip :$PORT"

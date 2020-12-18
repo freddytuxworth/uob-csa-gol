@@ -2,19 +2,23 @@ package gol
 
 import (
 	"fmt"
-	"net"
 	"net/rpc"
-	"os"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
+func (c *Controller) logf(format string, obj ...interface{}) {
+	fmt.Printf("%s	%s\n",
+		bold("[%s] controller (%s):", c.job.Name, c.thisAddr),
+		fmt.Sprintf(format, obj...))
+}
+
+
 type Controller struct {
 	thisAddr    string
 	distributor stubs.Remote
-	filename    string
-	maxTurns    int
+	job         stubs.GolJob
 	io          ioState
 	keyPresses  chan rune
 	events      chan Event
@@ -27,51 +31,44 @@ func (c *Controller) GameFinished(req stubs.InstructionResult, res *bool) (err e
 }
 
 func (c *Controller) startGame(grid stubs.Grid) {
-	err := c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
+	util.Check(c.distributor.Call(stubs.SetInitialState, stubs.DistributorInitialState{
+		JobName:        c.job.Name,
 		Grid:           grid,
-		MaxTurns:       c.maxTurns,
+		Turns:          c.job.Turns,
 		ControllerAddr: c.thisAddr,
-	}, nil)
-	if err != nil {
-		panic(err)
-	}
+	}, nil))
+	c.logf("set distributor initial state")
 }
 
 func (c *Controller) runInstruction(instruction stubs.Instruction) (result stubs.InstructionResult, err error) {
-	//err := c.distributor.Call(stubs.GetState, instruction, &result)
-	//if err != nil && err.Error() == errors.GameAlreadyFinished.Error() {
-	//	return result
-	//}
-	//util.Check(err)
 	return result, c.distributor.Call(stubs.GetState, instruction, &result)
 }
 
-
-//func (c *Controller) setProcessingPaused(paused bool) int {
-//	p := stubs.GetCurrentTurn
-//	if paused {
-//		p |= stubs.Pause
-//	} else {
-//		p |= stubs.Resume
-//	}
-//	return c.runInstruction(p).CurrentTurn
-//}
-
 func (c *Controller) saveState(state stubs.InstructionResult) {
+	fmt.Println(state)
 	filename := fmt.Sprintf("%dx%dx%d", state.State.Width, state.State.Height, state.CurrentTurn)
-	fmt.Printf("got state at turn %d, saving to %s\n", state.CurrentTurn, filename)
+	c.logf("saving state at turn %d, to %s\n", state.CurrentTurn, filename)
 	c.io.writeStateToImage(state.State, filename)
 }
 
-func (c *Controller) run() {
-	c.distributor.Connect()
+func (c *Controller) stop() {
+	c.logf("stopping gracefully")
+	c.io.waitUntilFinished()
+	close(c.events)
+}
 
-	if c.filename != "" {
-		state := c.io.readImageToSlice(c.filename)
+func (c *Controller) run() {
+	c.logf("starting controller")
+	c.distributor.Connect()
+	c.logf("connected to distributor")
+
+	if c.job.Turns != 0 {
+		state := c.io.readImageToSlice(c.job.Filename)
+		c.logf("read state from %s", c.job.Filename)
 		c.startGame(state)
 	}
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 
 	for {
 		select {
@@ -80,7 +77,7 @@ func (c *Controller) run() {
 			if err != nil {
 				continue
 			}
-			fmt.Printf("turn %d, %d alive cells\n", aliveCells.CurrentTurn, aliveCells.AliveCellsCount)
+			//fmt.Printf("turn %d, %d alive cells\n", aliveCells.CurrentTurn, aliveCells.AliveCellsCount)
 			c.events <- AliveCellsCount{
 				CompletedTurns: aliveCells.CurrentTurn,
 				CellsCount:     aliveCells.AliveCellsCount,
@@ -88,74 +85,76 @@ func (c *Controller) run() {
 		case key := <-c.keyPresses:
 			switch key {
 			case 'p':
-				state, err :=  c.runInstruction(stubs.GetCurrentTurn | stubs.Pause)
+				state, err := c.runInstruction(stubs.GetCurrentTurn | stubs.Pause)
 				if err != nil {
-					fmt.Printf("unable to pause state: %v", err)
+					c.logf("unable to pause state: %v", err)
 					continue
 				}
-				fmt.Printf("paused, current turn: %d\n", state.CurrentTurn)
-				for {
-					if <-c.keyPresses == 'p' {
-						state, err :=  c.runInstruction(stubs.GetCurrentTurn | stubs.Resume)
-						util.Check(err)
-						fmt.Printf("resumed, current turn: %d\n", state.CurrentTurn)
-						break
-					}
-				}
+				c.logf("paused, current turn: %d", state.CurrentTurn)
+				for <-c.keyPresses != 'p' {}
+				state, err = c.runInstruction(stubs.GetCurrentTurn | stubs.Resume)
+				util.Check(err)
+				c.logf("resumed, current turn: %d", state.CurrentTurn)
 			case 'q':
-				fmt.Printf("fetching state and quitting\n")
+				c.logf("fetching state, saving to image and quitting")
 				state, err := c.runInstruction(stubs.GetCurrentTurn | stubs.GetWholeState)
 				if err == nil {
 					c.saveState(state)
 				} else {
-					fmt.Printf("unable to fetch state: %v", err)
+					c.logf("unable to fetch state: %v", err)
 				}
 				c.saveState(state)
-				os.Exit(0)
+				return
 			case 's':
-				fmt.Printf("fetching state\n")
+				c.logf("fetching state and saving to image")
 				state, err := c.runInstruction(stubs.GetCurrentTurn | stubs.GetWholeState)
 				if err == nil {
 					c.saveState(state)
 				} else {
-					fmt.Printf("unable to fetch state: %v", err)
+					c.logf("unable to fetch state: %v", err)
 				}
 			case 'k':
-				fmt.Printf("shutting down system\n")
+				c.logf("shutting down system")
 				state, err := c.runInstruction(stubs.GetCurrentTurn | stubs.Shutdown)
 				if err == nil {
-					fmt.Printf("system shut down at turn %d\n", state.CurrentTurn)
+					c.logf("system shut down at turn %d", state.CurrentTurn)
 				} else {
-					fmt.Printf("unable to shut down system state: %v", err)
+					c.logf("unable to shut down system state: %v", err)
 				}
-				os.Exit(0)
+				return
 			}
 		case gameEnd := <-c.gameEndChan:
-			fmt.Printf("game ended\n")
+			c.logf("game finished")
 			c.saveState(gameEnd)
-			os.Exit(0)
+			return
 		}
 	}
 }
 
-func RunController(thisAddr string, distributorAddr string, filename string, maxTurns int, keyPresses chan rune, events chan Event) {
-	fmt.Println("starting controller")
-
+func RunController(thisAddr, distributorAddr string, job stubs.GolJob, keyPresses chan rune, events chan Event) {
 	thisController := Controller{
 		thisAddr:    thisAddr,
 		distributor: stubs.Remote{Addr: distributorAddr},
-		filename:    filename,
-		maxTurns:    maxTurns,
+		job:         job,
 		io:          StartIo(),
 		keyPresses:  keyPresses,
 		events:      events,
 		gameEndChan: make(chan stubs.InstructionResult, 1),
 	}
 
+	//server := rpc.NewServer()
+	//server.HandleHTTP()
 	util.Check(rpc.Register(&thisController))
-	listener, _ := net.Listen("tcp", thisAddr)
-	defer listener.Close()
-	go rpc.Accept(listener)
+	stubs.ServeHTTP(thisAddr)
+	//rpc.HandleHTTP()
+	//l, e := net.Listen("tcp", thisAddr)
+	//if e != nil {
+	//	log.Fatal("listen error:", e)
+	//}
+	//go http.Serve(l, nil)
 
 	thisController.run()
+	thisController.stop()
+	//l.Close()
+	//defer listener.Close()
 }

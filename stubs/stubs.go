@@ -2,10 +2,29 @@ package stubs
 
 import (
 	"fmt"
+	"log"
+	"net"
+	"net/http"
 	"net/rpc"
 	"strings"
 	"uk.ac.bris.cs/gameoflife/util"
 )
+
+type GolJob struct {
+	Name     string
+	Filename string
+	Turns    int
+}
+
+func ServeHTTP(thisAddr string) {
+	fmt.Printf("listening on %s\n", thisAddr)
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", thisAddr)
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	go http.Serve(l, nil)
+}
 
 type Remote struct {
 	*rpc.Client
@@ -13,7 +32,7 @@ type Remote struct {
 }
 
 func (c *Remote) Connect() {
-	client, err := rpc.Dial("tcp", c.Addr)
+	client, err := rpc.DialHTTP("tcp", c.Addr)
 	util.Check(err)
 	c.Client = client
 }
@@ -25,6 +44,7 @@ type Grid struct {
 }
 
 func (g Grid) String() string {
+	return fmt.Sprintf("Grid(%dx%d)", g.Width, g.Height)
 	var output []string
 	output = append(output, strings.Repeat("──", g.Width))
 	for y := 0; y < g.Height; y++ {
@@ -90,6 +110,7 @@ func (s Instruction) HasFlag(flag Instruction) bool {
 }
 
 type RowUpdate struct {
+	//Turn         int
 	Row          []byte
 	StateRequest Instruction
 }
@@ -100,7 +121,8 @@ func (r RowUpdate) String() string {
 
 type WorkerInitialState struct {
 	WorkerId        int
-	MaxTurns        int
+	JobName         string
+	Turns           int
 	Grid            Grid
 	WorkerBelowAddr string
 	DistributorAddr string
@@ -108,11 +130,12 @@ type WorkerInitialState struct {
 
 func (s WorkerInitialState) String() string {
 	return fmt.Sprintf(
-		"id: %d, size: %dx%d, max turns: %d, worker below: %s, distributor: %s\n%v",
+		"worker id: %d, job: %s, size: %dx%d, turns: %d, worker below: %s, distributor: %s\n%v",
 		s.WorkerId,
+		s.JobName,
 		s.Grid.Width,
 		s.Grid.Height,
-		s.MaxTurns,
+		s.Turns,
 		s.WorkerBelowAddr,
 		s.DistributorAddr,
 		s.Grid,
@@ -120,11 +143,20 @@ func (s WorkerInitialState) String() string {
 }
 
 type DistributorInitialState struct {
+	JobName        string
 	Grid           Grid
-	MaxTurns       int
+	Turns          int
 	ControllerAddr string
 }
 
 func (s DistributorInitialState) String() string {
-	return fmt.Sprintf("size: %dx%d, max turns: %d, controller: %s\n%v", s.Grid.Width, s.Grid.Height, s.MaxTurns, s.Grid)
+	return fmt.Sprintf(
+		"job: %s, size: %dx%d, turns: %d, controller: %s\n%v",
+		s.JobName,
+		s.Grid.Width,
+		s.Grid.Height,
+		s.Turns,
+		s.ControllerAddr,
+		s.Grid,
+	)
 }

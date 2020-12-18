@@ -12,12 +12,12 @@ import (
 
 // ioState is the internal state of the io goroutine.
 type ioState struct {
-	Command chan ioCommand
-	Idle    chan bool
+	command chan ioCommand
+	idle    chan bool
 
-	Filename chan string
-	Output   chan stubs.Grid
-	Input    chan stubs.Grid
+	filename chan string
+	output   chan stubs.Grid
+	input    chan stubs.Grid
 }
 
 // IoCommand allows requesting behaviour from the io (pgm) goroutine.
@@ -38,12 +38,12 @@ const (
 func (io *ioState) writePgmImage() {
 	_ = os.Mkdir("out", os.ModePerm)
 
-	filename := <-io.Filename
+	filename := <-io.filename
 	file, ioError := os.Create("out/" + filename + ".pgm")
 	util.Check(ioError)
 	defer file.Close()
 
-	world := <-io.Output
+	world := <-io.output
 
 	_, _ = file.WriteString("P5\n")
 	//_, _ = file.WriteString("# PGM file writer by pnmmodules (https://github.com/owainkenwayucl/pnmmodules).\n")
@@ -70,8 +70,7 @@ func (io *ioState) writePgmImage() {
 
 // readPgmImage opens a pgm file and sends its data as an array of bytes.
 func (io *ioState) readPgmImage() {
-	fmt.Println("Reading image!")
-	filename := <-io.Filename
+	filename := <-io.filename
 	data, ioError := ioutil.ReadFile("images/" + filename + ".pgm")
 	util.Check(ioError)
 
@@ -97,26 +96,24 @@ func (io *ioState) readPgmImage() {
 			world[y][x] = raw[y * width + x] >> 7
 		}
 	}
-	io.Input <- stubs.Grid{
+	io.input <- stubs.Grid{
 		Width:  width,
 		Height: height,
 		Cells:  world,
 	}
-
-	fmt.Println("File", filename, "input done!")
 }
 
 func (io *ioState) ioLoop() {
 	for {
 		select {
-		case command := <-io.Command:
+		case command := <-io.command:
 			switch command {
 			case ioInput:
 				io.readPgmImage()
 			case ioOutput:
 				io.writePgmImage()
 			case ioCheckIdle:
-				io.Idle <- true
+				io.idle <- true
 			}
 		}
 	}
@@ -125,11 +122,11 @@ func (io *ioState) ioLoop() {
 // startIo should be the entrypoint of the io goroutine.
 func StartIo() ioState {
 	io := ioState{
-		Command:  make(chan ioCommand),
-		Idle:     make(chan bool),
-		Filename: make(chan string),
-		Output:   make(chan stubs.Grid),
-		Input:    make(chan stubs.Grid),
+		command:  make(chan ioCommand),
+		idle:     make(chan bool),
+		filename: make(chan string),
+		output:   make(chan stubs.Grid),
+		input:    make(chan stubs.Grid),
 	}
 
 	go io.ioLoop()
@@ -139,15 +136,21 @@ func StartIo() ioState {
 
 // synchronously write a grid to a PGM file
 func (io *ioState) writeStateToImage(state stubs.Grid, filename string) {
-	io.Command <- ioOutput
-	io.Filename <- filename
-	io.Output <- state
+	io.command <- ioOutput
+	io.filename <- filename
+	io.output <- state
 }
 
 // synchronously read a grid from a PGM file
 func (io *ioState) readImageToSlice(filename string) stubs.Grid {
-	io.Command <- ioInput // send ioInput command to io goroutine
-	io.Filename <- filename
+	fmt.Println("reading", filename)
+	io.command <- ioInput // send ioInput command to io goroutine
+	io.filename <- filename
 
-	return <-io.Input
+	return <-io.input
+}
+
+func (io *ioState) waitUntilFinished() {
+	io.command <- ioCheckIdle
+	<-io.idle
 }
