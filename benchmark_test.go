@@ -29,8 +29,8 @@ func runGolOnce(p gol.Params) {
 // The b.N  repetition is needed because benchmark results are not always constant.
 func BenchmarkGol(b *testing.B) {
 	//os.Stdout = nil
-	sizes := []int{16, 64, 128, 256, 512}
-	turns := []int{1, 100, 1000}
+	sizes := []int{5120}
+	turns := []int{1000}
 	//distributorChannels := gol.SetupIO(events, nil)
 	for _, size := range sizes {
 		for _, nTurns := range turns {
@@ -43,7 +43,7 @@ func BenchmarkGol(b *testing.B) {
 					})
 				}
 			})
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 

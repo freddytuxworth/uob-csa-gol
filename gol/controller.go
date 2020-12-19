@@ -9,12 +9,16 @@ import (
 )
 
 func (c *Controller) logf(format string, obj ...interface{}) {
+	timeNow := time.Now().UnixNano() / 1000000
 	fmt.Printf("%s	%s\n",
-		bold("[%s] controller (%s):", c.job.Name, c.thisAddr),
+		bold("%d (+%d) | controller [%s]:", timeNow-c.startTime, timeNow-c.lastLogTime, c.job.Name),
 		fmt.Sprintf(format, obj...))
+	c.lastLogTime = timeNow
 }
 
 type Controller struct {
+	startTime   int64
+	lastLogTime int64
 	thisAddr    string
 	distributor stubs.Remote
 	job         stubs.GolJob
@@ -25,13 +29,14 @@ type Controller struct {
 }
 
 func (c *Controller) startGame(grid stubs.Grid) {
+	c.logf("begin sending initial state to distributor")
 	util.Check(c.distributor.Call("Distributor.SetInitialState", stubs.DistributorInitialState{
 		JobName: c.job.Name,
 		Grid:    grid.Encode(),
 		Turns:   c.job.Turns,
 		//ControllerAddr: c.thisAddr,
 	}, nil))
-	c.logf("set distributor initial state")
+	c.logf("finished sending initial state to distributor")
 }
 
 func (c *Controller) runInstruction(instruction stubs.Instruction) (result stubs.InstructionResult, err error) {
@@ -39,7 +44,6 @@ func (c *Controller) runInstruction(instruction stubs.Instruction) (result stubs
 }
 
 func (c *Controller) saveState(state stubs.InstructionResult) {
-	fmt.Println(state)
 	filename := fmt.Sprintf("%dx%dx%d", state.State.Width, state.State.Height, state.CurrentTurn)
 	c.logf("saving state at turn %d, to %s\n", state.CurrentTurn, filename)
 	c.io.writeStateToImage(state.State, filename)
@@ -52,15 +56,16 @@ func (c *Controller) stop() {
 }
 
 func (c *Controller) run() {
+	c.startTime = time.Now().UnixNano() / 1000000
 	c.logf("starting controller")
 
 	if c.job.Filename != "" {
 		state := c.io.readImageToSlice(c.job.Filename)
-		c.logf("read state from %s", c.job.Filename)
+		c.logf("read state from file %s", c.job.Filename)
 		if c.job.Turns < 1 {
 			c.saveState(stubs.InstructionResult{
-				CurrentTurn:     0,
-				State:           state,
+				CurrentTurn: 0,
+				State:       state,
 			})
 			c.events <- FinalTurnComplete{
 				CompletedTurns: 0,
@@ -84,8 +89,9 @@ func (c *Controller) run() {
 		select {
 		case <-ticker.C:
 			aliveCells, err := c.runInstruction(stubs.GetAliveCellsCount | stubs.GetCurrentTurn)
+			c.logf("turn %d, %d cells alive", aliveCells.CurrentTurn, aliveCells.AliveCellsCount)
 			if err != nil {
-				continue
+				panic(err)
 			}
 			c.events <- AliveCellsCount{
 				CompletedTurns: aliveCells.CurrentTurn,

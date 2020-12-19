@@ -3,7 +3,9 @@ package gol
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/rpc"
+	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -21,7 +23,7 @@ type strip struct {
 
 func (d *Distributor) logf(format string, obj ...interface{}) {
 	fmt.Printf("%s	%s\n",
-		bold("[%s] distributor (%s):", d.jobName, d.thisAddr),
+		bold("%d distributor [%s]:", time.Now().UnixNano() / 1000000, d.jobName),
 		fmt.Sprintf(format, obj...))
 }
 
@@ -39,6 +41,7 @@ type Distributor struct {
 
 func (d *Distributor) GetEndState(req bool, res *stubs.EncodedInstructionResult) (err error) {
 	*res = (<-d.endStateChan).Encode()
+	d.logf("GES returning")
 	return
 }
 
@@ -129,7 +132,8 @@ func (d *Distributor) run() {
 	for {
 		select {
 		case initialState := <-d.initialStateChan:
-			d.jobName = initialState.JobName
+			d.p.Threads = len(d.workers)
+			d.jobName = fmt.Sprintf("%sw%d", initialState.JobName, d.p.Threads)
 			d.logf("setting initial state")
 			for i := 0; i < len(d.workers); i++ {
 				d.workers[i].instructionResults = make(chan stubs.InstructionResult, 2)
@@ -138,7 +142,6 @@ func (d *Distributor) run() {
 			d.getStateChan = make(chan stubs.InstructionResult, 2)
 			d.endStateChan = make(chan stubs.InstructionResult, 1)
 			d.p.Turns = initialState.Turns
-			d.p.Threads = len(d.workers)
 			initialGrid := initialState.Grid.Decode()
 			d.p.ImageWidth = initialGrid.Width
 			d.p.ImageHeight = initialGrid.Height
@@ -171,10 +174,10 @@ func RunDistributor(thisAddr string, workerAddrs []string) {
 		initialStateChan: make(chan stubs.DistributorInitialState, 1),
 	}
 	util.Check(rpc.Register(&thisDistributor))
-	stubs.ServeHTTP(8000)
-	//listener, _ := net.Listen("tcp", ":8000")
-	//defer listener.Close()
-	//go rpc.Accept(listener)
+	//stubs.ServeHTTP(8000)
+	listener, _ := net.Listen("tcp", ":8000")
+	defer listener.Close()
+	go rpc.Accept(listener)
 
 	//go stubs.Serve(Distributor{}, *thisAddr)
 	thisDistributor.run()
