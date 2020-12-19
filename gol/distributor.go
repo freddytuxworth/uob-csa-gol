@@ -4,14 +4,71 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type Grid struct {
-	width  int
-	height int
-	cells  [][]byte
+	Width  int
+	Height int
+	Cells  [][]byte
+}
+
+func (g Grid) make() {
+	g.Cells = make([][]byte, g.Height)
+	for y := 0; y < g.Height; y++ {
+		g.Cells[y] = make([]byte, g.Width)
+	}
+}
+
+func (g Grid) countAlive() int {
+	aliveCells := 0
+	for y := 0; y < g.Height; y++ {
+		for x := 0; x < g.Width; x++ {
+			aliveCells += int(g.Cells[y][x])
+		}
+	}
+
+	return aliveCells
+}
+
+func (g Grid) getRow(y int) []byte {
+	if y < 0 {
+		y += g.Height
+	}
+	y %= g.Height
+	return g.Cells[y]
+}
+
+func (g Grid) get(x, y int) byte {
+	if x < 0 {
+		x += g.Width
+	}
+	if y < 0 {
+		y += g.Height
+	}
+	x %= g.Width
+	y %= g.Height
+	return g.Cells[y][x]
+}
+
+func (g Grid) set(x, y int, val byte) bool {
+	if x < 0 {
+		x += g.Width
+	}
+	if y < 0 {
+		y += g.Height
+	}
+	x %= g.Width
+	y %= g.Height
+
+	if g.Cells[y][x] == val {
+		return false
+	}
+
+	g.Cells[y][x] = val
+	return true
 }
 
 type distributorChannels struct {
@@ -36,26 +93,26 @@ type workerChannels struct {
 }
 
 func sendEdges(wrappedGrid Grid, c workerChannels) {
-	topEdge := make([]byte, wrappedGrid.width)
-	copy(topEdge, wrappedGrid.cells[1])
+	topEdge := make([]byte, wrappedGrid.Width)
+	copy(topEdge, wrappedGrid.Cells[1])
 	c.topEdgeOut <- topEdge
 
-	bottomEdge := make([]byte, wrappedGrid.width)
-	copy(bottomEdge, wrappedGrid.cells[wrappedGrid.height-2])
+	bottomEdge := make([]byte, wrappedGrid.Width)
+	copy(bottomEdge, wrappedGrid.Cells[wrappedGrid.Height-2])
 	c.bottomEdgeOut <- bottomEdge
 }
 
 func workerThread(threadNum int, initialState Grid, offsetY int, c workerChannels) {
 	wrappedGrid := Grid{
-		width:  initialState.width,
-		height: initialState.height + 2,
-		cells:  make([][]byte, initialState.height+2),
+		Width:  initialState.Width,
+		Height: initialState.Height + 2,
+		Cells:  make([][]byte, initialState.Height+2),
 	}
 
-	for y := 0; y < wrappedGrid.height; y++ {
-		wrappedGrid.cells[y] = make([]byte, initialState.width)
-		if y > 0 && y < wrappedGrid.height-1 {
-			copy(wrappedGrid.cells[y], initialState.cells[y-1])
+	for y := 0; y < wrappedGrid.Height; y++ {
+		wrappedGrid.Cells[y] = make([]byte, initialState.Width)
+		if y > 0 && y < wrappedGrid.Height-1 {
+			copy(wrappedGrid.Cells[y], initialState.Cells[y-1])
 		}
 	}
 
@@ -63,14 +120,14 @@ func workerThread(threadNum int, initialState Grid, offsetY int, c workerChannel
 
 	for turn := 1; ; turn++ {
 		// get top and bottom edges from workers above and below
-		wrappedGrid.cells[0] = <-c.topEdgeIn
-		wrappedGrid.cells[initialState.height+1] = <-c.bottomEdgeIn
+		wrappedGrid.Cells[0] = <-c.topEdgeIn
+		wrappedGrid.Cells[initialState.Height+1] = <-c.bottomEdgeIn
 
 		cellFlips := make([]util.Cell, 0)
-		for y := 1; y < initialState.height+1; y++ {
-			for x := 0; x < initialState.width; x++ {
+		for y := 1; y < initialState.Height+1; y++ {
+			for x := 0; x < initialState.Width; x++ {
 				nextCellState := shouldSurvive(x, y, wrappedGrid)
-				if nextCellState != wrappedGrid.cells[y][x] {
+				if nextCellState != wrappedGrid.Cells[y][x] {
 					cellFlips = append(cellFlips, util.Cell{
 						X: x,
 						Y: y + offsetY - 1,
@@ -79,7 +136,7 @@ func workerThread(threadNum int, initialState Grid, offsetY int, c workerChannel
 			}
 		}
 		for _, cellFlip := range cellFlips {
-			wrappedGrid.cells[cellFlip.Y-offsetY+1][cellFlip.X] = 1 - wrappedGrid.cells[cellFlip.Y-offsetY+1][cellFlip.X]
+			wrappedGrid.Cells[cellFlip.Y-offsetY+1][cellFlip.X] = 1 - wrappedGrid.Cells[cellFlip.Y-offsetY+1][cellFlip.X]
 		}
 		sendEdges(wrappedGrid, c)
 		c.results <- cellFlips
@@ -110,9 +167,9 @@ func startWorkers(p Params, currentState [][]byte) []workerChannels {
 		size := int(math.Ceil(float64(p.ImageHeight-i) / float64(n)))
 		n--
 		go workerThread(thread, Grid{
-			width:  p.ImageWidth,
-			height: size,
-			cells:  currentState[i : i+size],
+			Width:  p.ImageWidth,
+			Height: size,
+			Cells:  currentState[i : i+size],
 		}, i, workers[thread])
 		i += size
 		thread++
@@ -167,39 +224,46 @@ func writeStateToImage(p Params, currentState [][]byte, c distributorChannels, t
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	currentState := readImageToSlice(p, c)
+	io := StartIo()
+	currentState := io.readImageToSlice(fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight))
 
-	workers := startWorkers(p, currentState)
+	processor := GolProcessor{
+		p:            Params{},
+		currentState: &currentState,
+	}
+	stopProcessor := make(chan bool)
+	processor.start(c.events, stopProcessor)
+
 	ticker := time.NewTicker(2 * time.Second)
 
-	for turn := 0; turn < p.Turns; {
-		select {
-		case <-ticker.C:
-			c.events <- AliveCellsCount{
-				CompletedTurns: turn,
-				CellsCount:     countAliveCells(p, currentState),
-			}
-		case key := <-c.keypresses:
-			switch key {
-			case 'p':
-				fmt.Println("Current turn:", turn)
-				for {
-					if <-c.keypresses == 'p' {
-						break
-					}
-				}
-			case 'q':
-				writeStateToImage(p, currentState, c, turn)
-				os.Exit(0)
-			case 's':
-				writeStateToImage(p, currentState, c, turn)
-			}
-		default:
-			collateResults(p, currentState, workers, c.events, turn)
-			c.events <- TurnComplete{turn + 1}
-			//fmt.Println(turn, countAliveCells(p, currentState))
-			turn++
+	select {
+	case <-ticker.C:
+		stopProcessor <- true
+		c.events <- AliveCellsCount{
+			CompletedTurns: processor.currentTurn,
+			CellsCount:     processor.currentState.countAlive(),
 		}
+		stopProcessor <- true
+	case key := <-c.keypresses:
+		switch key {
+		case 'p':
+			fmt.Println("Current turn:", turn)
+			for {
+				if <-c.keypresses == 'p' {
+					break
+				}
+			}
+		case 'q':
+			writeStateToImage(p, currentState, c, turn)
+			os.Exit(0)
+		case 's':
+			writeStateToImage(p, currentState, c, turn)
+		}
+	default:
+		collateResults(p, currentState, workers, c.events, turn)
+		c.events <- TurnComplete{turn + 1}
+		//fmt.Println(turn, countAliveCells(p, currentState))
+		turn++
 	}
 
 	c.events <- FinalTurnComplete{

@@ -15,23 +15,23 @@ type Params struct {
 func shouldSurvive(x int, y int, grid Grid) byte {
 	leftX := x - 1
 	if x == 0 {
-		leftX += grid.width
+		leftX += grid.Width
 	}
 
-	rightX := (x + 1) % grid.width
+	rightX := (x + 1) % grid.Width
 
 	livingNeighbors :=
-		grid.cells[y-1][leftX] +
-			grid.cells[y-1][x] +
-			grid.cells[y-1][rightX] +
-			grid.cells[y][leftX] +
-			grid.cells[y][rightX] +
-			grid.cells[y+1][leftX] +
-			grid.cells[y+1][x] +
-			grid.cells[y+1][rightX]
+		grid.Cells[y-1][leftX] +
+			grid.Cells[y-1][x] +
+			grid.Cells[y-1][rightX] +
+			grid.Cells[y][leftX] +
+			grid.Cells[y][rightX] +
+			grid.Cells[y+1][leftX] +
+			grid.Cells[y+1][x] +
+			grid.Cells[y+1][rightX]
 
 	if livingNeighbors == 2 {
-		return grid.cells[y][x]
+		return grid.Cells[y][x]
 	} else if livingNeighbors == 3 {
 		return 1
 	}
