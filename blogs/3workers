@@ -1,0 +1,175 @@
+goos: linux
+goarch: amd64
+pkg: uk.ac.bris.cs/gameoflife
+BenchmarkGol
+BenchmarkGol/5120x5120,_1000_turns
+0 (+1608365843334) | controller [5120x5120]:	starting controller
+reading 5120x5120
+342 (+342) | controller [5120x5120]:	read state from file 5120x5120
+441 (+99) | controller [5120x5120]:	connected to distributor
+441 (+0) | controller [5120x5120]:	begin sending initial state to distributor
+4752 (+4311) | controller [5120x5120]:	finished sending initial state to distributor
+7141 (+2389) | controller [5120x5120]:	turn 5, 6124418 cells alive
+9094 (+1953) | controller [5120x5120]:	turn 10, 5275693 cells alive
+11237 (+2143) | controller [5120x5120]:	turn 16, 4622134 cells alive
+13079 (+1842) | controller [5120x5120]:	turn 21, 4241083 cells alive
+15162 (+2083) | controller [5120x5120]:	turn 27, 3906318 cells alive
+17276 (+2114) | controller [5120x5120]:	turn 33, 3647370 cells alive
+19272 (+1996) | controller [5120x5120]:	turn 39, 3443099 cells alive
+21321 (+2049) | controller [5120x5120]:	turn 45, 3274462 cells alive
+23184 (+1863) | controller [5120x5120]:	turn 50, 3155528 cells alive
+25061 (+1877) | controller [5120x5120]:	turn 56, 3039424 cells alive
+27077 (+2016) | controller [5120x5120]:	turn 62, 2938356 cells alive
+29082 (+2005) | controller [5120x5120]:	turn 68, 2844146 cells alive
+31027 (+1945) | controller [5120x5120]:	turn 74, 2759786 cells alive
+33024 (+1997) | controller [5120x5120]:	turn 80, 2685061 cells alive
+34981 (+1957) | controller [5120x5120]:	turn 86, 2619066 cells alive
+36937 (+1956) | controller [5120x5120]:	turn 92, 2555266 cells alive
+38895 (+1958) | controller [5120x5120]:	turn 98, 2493600 cells alive
+41239 (+2344) | controller [5120x5120]:	turn 105, 2438891 cells alive
+43084 (+1845) | controller [5120x5120]:	turn 111, 2390991 cells alive
+45028 (+1944) | controller [5120x5120]:	turn 117, 2345901 cells alive
+46925 (+1897) | controller [5120x5120]:	turn 123, 2304057 cells alive
+49227 (+2302) | controller [5120x5120]:	turn 130, 2259933 cells alive
+51083 (+1856) | controller [5120x5120]:	turn 136, 2228327 cells alive
+53027 (+1944) | controller [5120x5120]:	turn 142, 2193558 cells alive
+54955 (+1928) | controller [5120x5120]:	turn 148, 2165053 cells alive
+57261 (+2306) | controller [5120x5120]:	turn 155, 2131507 cells alive
+59143 (+1882) | controller [5120x5120]:	turn 161, 2101951 cells alive
+60969 (+1826) | controller [5120x5120]:	turn 167, 2077024 cells alive
+63256 (+2287) | controller [5120x5120]:	turn 174, 2041102 cells alive
+65242 (+1986) | controller [5120x5120]:	turn 180, 2016616 cells alive
+67043 (+1801) | controller [5120x5120]:	turn 186, 1992477 cells alive
+68888 (+1845) | controller [5120x5120]:	turn 192, 1969394 cells alive
+71160 (+2272) | controller [5120x5120]:	turn 199, 1949752 cells alive
+73084 (+1924) | controller [5120x5120]:	turn 205, 1925543 cells alive
+74877 (+1793) | controller [5120x5120]:	turn 211, 1905897 cells alive
+77071 (+2194) | controller [5120x5120]:	turn 218, 1885505 cells alive
+79025 (+1954) | controller [5120x5120]:	turn 224, 1869445 cells alive
+81175 (+2150) | controller [5120x5120]:	turn 231, 1848921 cells alive
+83119 (+1944) | controller [5120x5120]:	turn 237, 1828782 cells alive
+84923 (+1804) | controller [5120x5120]:	turn 243, 1810636 cells alive
+87133 (+2210) | controller [5120x5120]:	turn 250, 1793507 cells alive
+89073 (+1940) | controller [5120x5120]:	turn 256, 1781664 cells alive
+91210 (+2137) | controller [5120x5120]:	turn 263, 1760665 cells alive
+93162 (+1952) | controller [5120x5120]:	turn 269, 1744740 cells alive
+95252 (+2090) | controller [5120x5120]:	turn 276, 1727990 cells alive
+97115 (+1863) | controller [5120x5120]:	turn 282, 1715081 cells alive
+98955 (+1840) | controller [5120x5120]:	turn 288, 1704593 cells alive
+101143 (+2188) | controller [5120x5120]:	turn 295, 1689641 cells alive
+102986 (+1843) | controller [5120x5120]:	turn 301, 1681051 cells alive
+105136 (+2150) | controller [5120x5120]:	turn 308, 1664593 cells alive
+106978 (+1842) | controller [5120x5120]:	turn 314, 1652916 cells alive
+109234 (+2256) | controller [5120x5120]:	turn 321, 1638145 cells alive
+110982 (+1748) | controller [5120x5120]:	turn 327, 1629281 cells alive
+113137 (+2155) | controller [5120x5120]:	turn 334, 1616969 cells alive
+115072 (+1935) | controller [5120x5120]:	turn 340, 1609646 cells alive
+117220 (+2148) | controller [5120x5120]:	turn 347, 1593361 cells alive
+119062 (+1842) | controller [5120x5120]:	turn 353, 1588760 cells alive
+121226 (+2164) | controller [5120x5120]:	turn 360, 1577054 cells alive
+123056 (+1830) | controller [5120x5120]:	turn 366, 1566913 cells alive
+124882 (+1826) | controller [5120x5120]:	turn 372, 1562392 cells alive
+127047 (+2165) | controller [5120x5120]:	turn 379, 1554080 cells alive
+128942 (+1895) | controller [5120x5120]:	turn 385, 1543539 cells alive
+131045 (+2103) | controller [5120x5120]:	turn 392, 1534847 cells alive
+132883 (+1838) | controller [5120x5120]:	turn 398, 1526664 cells alive
+135056 (+2173) | controller [5120x5120]:	turn 405, 1519319 cells alive
+136921 (+1865) | controller [5120x5120]:	turn 411, 1509975 cells alive
+139031 (+2110) | controller [5120x5120]:	turn 418, 1500032 cells alive
+140905 (+1874) | controller [5120x5120]:	turn 424, 1493623 cells alive
+143127 (+2222) | controller [5120x5120]:	turn 431, 1486041 cells alive
+144932 (+1805) | controller [5120x5120]:	turn 437, 1479975 cells alive
+147139 (+2207) | controller [5120x5120]:	turn 444, 1472105 cells alive
+148944 (+1805) | controller [5120x5120]:	turn 450, 1468838 cells alive
+151114 (+2170) | controller [5120x5120]:	turn 457, 1462070 cells alive
+152935 (+1821) | controller [5120x5120]:	turn 463, 1456182 cells alive
+155110 (+2175) | controller [5120x5120]:	turn 470, 1447717 cells alive
+157299 (+2189) | controller [5120x5120]:	turn 477, 1442399 cells alive
+159105 (+1806) | controller [5120x5120]:	turn 483, 1435449 cells alive
+161162 (+2057) | controller [5120x5120]:	turn 490, 1426300 cells alive
+162988 (+1826) | controller [5120x5120]:	turn 496, 1420311 cells alive
+165701 (+2713) | controller [5120x5120]:	turn 503, 1411386 cells alive
+167199 (+1498) | controller [5120x5120]:	turn 510, 1402877 cells alive
+169026 (+1827) | controller [5120x5120]:	turn 516, 1395198 cells alive
+171186 (+2160) | controller [5120x5120]:	turn 523, 1390338 cells alive
+173098 (+1912) | controller [5120x5120]:	turn 529, 1381534 cells alive
+175190 (+2092) | controller [5120x5120]:	turn 536, 1376990 cells alive
+176950 (+1760) | controller [5120x5120]:	turn 542, 1375744 cells alive
+179070 (+2120) | controller [5120x5120]:	turn 549, 1367977 cells alive
+180905 (+1835) | controller [5120x5120]:	turn 555, 1361939 cells alive
+183069 (+2164) | controller [5120x5120]:	turn 562, 1356908 cells alive
+184915 (+1846) | controller [5120x5120]:	turn 568, 1352579 cells alive
+187057 (+2142) | controller [5120x5120]:	turn 575, 1346930 cells alive
+188920 (+1863) | controller [5120x5120]:	turn 581, 1342481 cells alive
+191029 (+2109) | controller [5120x5120]:	turn 588, 1339115 cells alive
+193139 (+2110) | controller [5120x5120]:	turn 595, 1332811 cells alive
+195351 (+2212) | controller [5120x5120]:	turn 602, 1328401 cells alive
+197094 (+1743) | controller [5120x5120]:	turn 608, 1322862 cells alive
+198899 (+1805) | controller [5120x5120]:	turn 614, 1319757 cells alive
+201018 (+2119) | controller [5120x5120]:	turn 621, 1314206 cells alive
+203283 (+2265) | controller [5120x5120]:	turn 628, 1312597 cells alive
+204983 (+1700) | controller [5120x5120]:	turn 634, 1308025 cells alive
+207129 (+2146) | controller [5120x5120]:	turn 641, 1304770 cells alive
+208921 (+1792) | controller [5120x5120]:	turn 647, 1301329 cells alive
+211090 (+2169) | controller [5120x5120]:	turn 654, 1298078 cells alive
+212900 (+1810) | controller [5120x5120]:	turn 660, 1295872 cells alive
+215012 (+2112) | controller [5120x5120]:	turn 667, 1289559 cells alive
+217162 (+2150) | controller [5120x5120]:	turn 674, 1284773 cells alive
+218956 (+1794) | controller [5120x5120]:	turn 680, 1282840 cells alive
+221053 (+2097) | controller [5120x5120]:	turn 687, 1277391 cells alive
+223179 (+2126) | controller [5120x5120]:	turn 694, 1271388 cells alive
+225048 (+1869) | controller [5120x5120]:	turn 700, 1267320 cells alive
+227198 (+2150) | controller [5120x5120]:	turn 707, 1263737 cells alive
+228938 (+1740) | controller [5120x5120]:	turn 713, 1257470 cells alive
+231055 (+2117) | controller [5120x5120]:	turn 720, 1255094 cells alive
+232872 (+1817) | controller [5120x5120]:	turn 726, 1250007 cells alive
+235082 (+2210) | controller [5120x5120]:	turn 733, 1244616 cells alive
+237125 (+2043) | controller [5120x5120]:	turn 740, 1240978 cells alive
+239223 (+2098) | controller [5120x5120]:	turn 747, 1235798 cells alive
+241104 (+1881) | controller [5120x5120]:	turn 753, 1231427 cells alive
+243142 (+2038) | controller [5120x5120]:	turn 760, 1228049 cells alive
+244940 (+1798) | controller [5120x5120]:	turn 766, 1225712 cells alive
+247064 (+2124) | controller [5120x5120]:	turn 773, 1223221 cells alive
+249214 (+2150) | controller [5120x5120]:	turn 780, 1216461 cells alive
+251062 (+1848) | controller [5120x5120]:	turn 786, 1214219 cells alive
+253104 (+2042) | controller [5120x5120]:	turn 793, 1210782 cells alive
+255356 (+2252) | controller [5120x5120]:	turn 799, 1209195 cells alive
+256995 (+1639) | controller [5120x5120]:	turn 806, 1206454 cells alive
+259146 (+2151) | controller [5120x5120]:	turn 813, 1205300 cells alive
+260913 (+1767) | controller [5120x5120]:	turn 819, 1204952 cells alive
+263042 (+2129) | controller [5120x5120]:	turn 826, 1201783 cells alive
+265188 (+2146) | controller [5120x5120]:	turn 833, 1199649 cells alive
+267031 (+1843) | controller [5120x5120]:	turn 839, 1196319 cells alive
+269181 (+2150) | controller [5120x5120]:	turn 846, 1193034 cells alive
+270917 (+1736) | controller [5120x5120]:	turn 852, 1189737 cells alive
+273072 (+2155) | controller [5120x5120]:	turn 859, 1186094 cells alive
+275142 (+2070) | controller [5120x5120]:	turn 866, 1183276 cells alive
+277011 (+1869) | controller [5120x5120]:	turn 872, 1181429 cells alive
+279080 (+2069) | controller [5120x5120]:	turn 879, 1178085 cells alive
+281135 (+2055) | controller [5120x5120]:	turn 886, 1175675 cells alive
+282926 (+1791) | controller [5120x5120]:	turn 892, 1175679 cells alive
+285053 (+2127) | controller [5120x5120]:	turn 899, 1172386 cells alive
+287204 (+2151) | controller [5120x5120]:	turn 906, 1170871 cells alive
+288944 (+1740) | controller [5120x5120]:	turn 912, 1168867 cells alive
+291058 (+2114) | controller [5120x5120]:	turn 919, 1164313 cells alive
+293245 (+2187) | controller [5120x5120]:	turn 926, 1160973 cells alive
+295088 (+1843) | controller [5120x5120]:	turn 932, 1157897 cells alive
+297137 (+2049) | controller [5120x5120]:	turn 939, 1154667 cells alive
+298937 (+1800) | controller [5120x5120]:	turn 945, 1153435 cells alive
+301130 (+2193) | controller [5120x5120]:	turn 952, 1152135 cells alive
+303280 (+2150) | controller [5120x5120]:	turn 959, 1149829 cells alive
+305022 (+1742) | controller [5120x5120]:	turn 965, 1148890 cells alive
+307172 (+2150) | controller [5120x5120]:	turn 972, 1146369 cells alive
+308907 (+1735) | controller [5120x5120]:	turn 978, 1142561 cells alive
+311057 (+2150) | controller [5120x5120]:	turn 985, 1141416 cells alive
+313155 (+2098) | controller [5120x5120]:	turn 992, 1136782 cells alive
+315235 (+2080) | controller [5120x5120]:	turn 999, 1135021 cells alive
+327535 (+12300) | controller [5120x5120]:	turn 1000, 0 cells alive
+327535 (+0) | controller [5120x5120]:	game finished
+327667 (+132) | controller [5120x5120]:	saving state at turn 1000, to 5120x5120x1000
+
+skipping file write for benchmark
+327667 (+0) | controller [5120x5120]:	stopping gracefully
+BenchmarkGol/5120x5120,_1000_turns-8         	       1	327666592090 ns/op
+PASS
+ok  	uk.ac.bris.cs/gameoflife	327.781s
