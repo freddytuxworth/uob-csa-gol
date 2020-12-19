@@ -1,8 +1,10 @@
 package gol
 
 import (
+	"fmt"
 	"math"
 	"sync"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -15,8 +17,9 @@ type GolProcessor struct {
 	p            Params
 	currentState *Grid
 	nextState    *Grid
-	currentTurn  int
+	pauseChan    chan bool
 	wg           sync.WaitGroup
+	currentTurn  int
 }
 
 func makeStrips(totalHeight, numStrips int) []Strip {
@@ -35,7 +38,7 @@ func (g *GolProcessor) doTurn(strip Strip) *[]util.Cell {
 	cellFlips := make([]util.Cell, 0)
 	for y := strip.Top; y < strip.Top+strip.Height; y++ {
 		for x := 0; x < g.p.ImageWidth; x++ {
-			changed := g.nextState.set(x, y, shouldSurvive(x, y, *g.currentState))
+			changed := g.nextState.set(x, y, g.currentState.nextState(x, y))
 			if changed {
 				cellFlips = append(cellFlips, util.Cell{
 					X: x,
@@ -47,48 +50,70 @@ func (g *GolProcessor) doTurn(strip Strip) *[]util.Cell {
 	return &cellFlips
 }
 
-func (g *GolProcessor) worker(strip Strip, cellFlips chan<- *[]util.Cell) {
-	for i := 0; i < g.p.Turns; i++ {
-		flips := g.doTurn(strip)
-		g.wg.Done()
-		cellFlips <- flips
+func (g *GolProcessor) worker(strip Strip, events chan<- Event, ready chan bool, done chan bool) {
+	//t := time.Now().UnixNano()
+	for i := 0; i <= g.p.Turns; i++ {
+		//n := time.Now().UnixNano()
+		//fmt.Printf("dt %d %d %v\n", strip.Top, g.currentTurn, (n-t)/1000000)
+		//t = n
+		for _, flip := range *(g.doTurn(strip)) {
+			events <- CellFlipped{
+				CompletedTurns: g.currentTurn + 1,
+				Cell:           flip,
+			}
+		}
+		done <- true
+		<-ready
+		//fmt.Println("r3")
 	}
 }
 
-func (g *GolProcessor) start(events chan<- Event, stop <-chan bool) {
+func (g *GolProcessor) pause() {
+	g.pauseChan <- true
+}
+
+func (g *GolProcessor) start(events chan<- Event, done chan<- bool) {
 	g.nextState = &Grid{
 		Width:  g.currentState.Width,
 		Height: g.currentState.Height,
 	}
 	g.nextState.make()
-
-	workers := make([]<-chan *[]util.Cell, 8)
+	g.pauseChan = make(chan bool, 1)
+	readyChan := make(chan bool, g.p.Threads)
+	doneChan := make(chan bool, g.p.Threads)
 	strips := makeStrips(g.p.ImageHeight, g.p.Threads)
-	g.wg.Add(g.p.Threads)
+
 	for i := 0; i < g.p.Threads; i++ {
-		workerChan := make(chan *[]util.Cell)
-		go g.worker(strips[i], workerChan)
-		workers = append(workers, workerChan)
+		go g.worker(strips[i], events, readyChan, doneChan)
 	}
-	for ; g.currentTurn < g.p.Turns; g.currentTurn++ {
-		g.wg.Wait()
+
+	for g.currentTurn = 0; g.currentTurn <= g.p.Turns; {
+		for i := 0; i < g.p.Threads; i++ {
+			<-doneChan
+		}
+		// safe time
+		g.currentTurn++
+
+		fmt.Println(g.currentState)
 		select {
-		case <-stop:
-			<-stop
+		case <-g.pauseChan:
+			fmt.Println("paused")
+			<-g.pauseChan
 		default:
 		}
-		// flip states
+		events <- TurnComplete{
+			CompletedTurns: g.currentTurn,
+		}
+		if g.currentTurn == g.p.Turns {
+			break
+		}
 		inter := g.currentState
 		g.currentState = g.nextState
 		g.nextState = inter
+		time.Sleep(100 * time.Millisecond)
 		for i := 0; i < g.p.Threads; i++ {
-			for _, flip := range *(<-workers[i]) {
-				events <- CellFlipped{
-					CompletedTurns: g.currentTurn,
-					Cell:           flip,
-				}
-			}
+			readyChan <- true
 		}
-		g.wg.Add(g.p.Threads)
 	}
+	done <- true
 }
